@@ -45,7 +45,6 @@ export class Targets {
     this.hits = 0;
     this.spawnT = 0.4;
     this.onComplete = onComplete;
-    this.travelVariant = 0;
     this.slots.reset();
   }
 
@@ -62,7 +61,8 @@ export class Targets {
   spawn() {
     const role = this.role;
     const lane = (this.spawned % 3) - 1 + (Math.random() - 0.5) * 0.5;
-    const end = new THREE.Vector3(lane * 0.28, this.headY - 0.3 + (Math.random() - 0.3) * 0.3, REACH_Z);
+    // chest height, so the cards and photos hung above stay clear of the flight path
+    const end = new THREE.Vector3(lane * 0.28, this.headY - 0.45 + (Math.random() - 0.3) * 0.3, REACH_Z);
     const start = new THREE.Vector3(end.x * 4, end.y + 1.2, SPAWN_Z);
     const obj = this.build(role.target, this.spawned);
     obj.position.copy(start);
@@ -77,7 +77,7 @@ export class Targets {
   build(type, i) {
     switch (type) {
       case 'paper': {
-        const front = toon(0xffffff, { map: assetTexture('paper_cover.png', paperPlaceholder), spec: 0 });
+        const front = new THREE.MeshBasicMaterial({ map: assetTexture('paper_cover.png', paperPlaceholder) });
         const side = toon(0xe8e1cf, { spec: 0 });
         const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.02), [side, side, side, side, front, side]);
         return inkOutline(m, 1.04);
@@ -104,12 +104,13 @@ export class Targets {
         // a thick card with gold edges: back faces the player while flying (+z),
         // the life scene is on -z and shows once it flips
         const g = new THREE.Group();
-        const k = (i % 5) + 1;
+        // the face is assigned on hit, so the six hit cards are always tarot_1..6
         const gold = toon(0xf2c14e, { spec: 0.8 });
-        const back = toon(0xffffff, { map: assetTexture('tarot_back.png', tarotBackPlaceholder) });
-        const front = toon(0xffffff, { map: assetTexture(`tarot_${k}.png`, tarotFrontPlaceholder(i)), emissive: 0x110818 });
+        const back = new THREE.MeshBasicMaterial({ map: assetTexture('tarot_back.png', tarotBackPlaceholder) });
+        const front = new THREE.MeshBasicMaterial({ color: 0x222222 });
         const card = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.4, 0.008), [gold, gold, gold, gold, back, front]);
         g.add(inkOutline(card, 1.04));
+        g.userData.frontMat = front;
         return g;
       }
       case 'polaroid': {
@@ -143,8 +144,16 @@ export class Targets {
     this.audio.play('hit');
     this.onHit?.(t);
 
-    const slot = this.hanging.children.length;
-    const hangPos = new THREE.Vector3(-0.62 + (slot % 5) * 0.31, this.headY + 0.42 + Math.floor(slot / 5) * 0.45, -1.7);
+    if (this.hits >= HITS_PER_ROLE) {
+      // that was the last one: anything still flying just fades past
+      for (const o of this.active) if (o.state === 'fly') o.state = 'miss';
+    }
+    // hung below the power moon row: tarot cards in one row of six, photos 3 x 2
+    const slot = this.hits - 1;
+    const hang = role.target === 'card'
+      ? { pos: new THREE.Vector3((slot - 2.5) * 0.27, this.headY + 0.27, -1.7), scale: 0.82 }
+      : { pos: new THREE.Vector3(((slot % 3) - 1) * 0.29, this.headY + 0.34 - Math.floor(slot / 3) * 0.29, -1.7), scale: 0.78 };
+    const hangPos = hang.pos;
 
     switch (role.target) {
       case 'paper': {
@@ -211,18 +220,17 @@ export class Targets {
       case 'card':
       case 'polaroid': {
         if (role.target === 'polaroid') {
-          const k = (t.index % 5) + 1;
           const pm = t.obj.userData.photoMat;
-          pm.map = assetTexture(`photo_${k}.jpg`, photoPlaceholder(t.index));
+          pm.map = assetTexture(`photo_${this.hits}.jpg`, photoPlaceholder(slot));
           pm.color.setHex(0xffffff);
           pm.needsUpdate = true;
           this.fx.flash(0xffffff, 0.25);
           this.audio.play('shutter');
-          if (this.hits % 2 === 0 && role.bg.length > 1) {
-            this.travelVariant++;
-            this.world.setRole(role, this.travelVariant);
-          }
         } else {
+          const fm = t.obj.userData.frontMat;
+          fm.map = assetTexture(`tarot_${this.hits}.png`, tarotFrontPlaceholder(slot));
+          fm.color.setHex(0xffffff);
+          fm.needsUpdate = true;
           this.audio.play('card');
         }
         const from = t.obj.position.clone();
@@ -233,6 +241,7 @@ export class Targets {
           if (t.t > 0.35) {
             const m = easeOut(Math.min(1, (t.t - 0.35) / 0.65));
             t.obj.position.lerpVectors(from, hangPos, m);
+            t.obj.scale.setScalar(1 + (hang.scale - 1) * m);
           }
           return k >= 1 ? 'hang' : false;
         };
@@ -276,8 +285,8 @@ export class Targets {
     const b = makeBuilding(this.built++);
     root.add(base, b);
     base.scale.setScalar(0.001);
-    b.scale.set(1, 0.001, 1);
-    root.userData = { grow: 0, base, b };
+    for (const part of b.userData.parts) part.visible = false;
+    root.userData = { t: 0, base, parts: b.userData.parts, shown: 0 };
     this.world.props.add(root);
     this.fx.shards(root.position.clone().add(new THREE.Vector3(0, 0.3, 0)), DEBRIS().cube, [0x9cc8ff, 0xffffff, 0x1f7bff], {
       count: 24, speed: 4, size: 4, life: 1.2, gravity: -4,
@@ -287,14 +296,24 @@ export class Targets {
 
   update(dt, hitPoints, autoHit, camPos) {
     this.camPos = camPos;
+    // buildings: the base pops, then plinth, floors, cornice and roof drop in
+    // one after another with a little bounce
     for (const p of this.world.props.children) {
       const u = p.userData;
-      if (u.grow === undefined) continue;
-      if (u.grow < 1) {
-        u.grow = Math.min(1, u.grow + dt * 0.9);
-        u.base.scale.setScalar(Math.max(0.001, easeOutBack(Math.min(1, u.grow * 2.5))));
-        u.b.scale.y = Math.max(0.001, easeOutBack(Math.max(0, Math.min(1, u.grow * 1.4 - 0.35))));
-      }
+      if (u.t === undefined) continue;
+      u.t += dt;
+      u.base.scale.setScalar(Math.max(0.001, easeOutBack(Math.min(1, u.t / 0.3))));
+      u.parts.forEach((part, i) => {
+        const k = (u.t - 0.25 - i * 0.13) / 0.24;
+        if (k <= 0) return;
+        if (!part.visible) {
+          part.visible = true;
+          if (i === u.parts.length - 1) this.audio.play('tick');
+        }
+        const e = easeOutBack(Math.min(1, k));
+        part.scale.set(1, Math.max(0.001, e), 1);
+        part.position.y = part.userData.y + (1 - Math.min(1, k)) * 0.35;
+      });
       p.position.y = -0.4 + Math.sin(performance.now() * 0.0012 + p.position.x) * 0.06;
     }
     if (this.running) {
@@ -314,7 +333,7 @@ export class Targets {
         let hit = false;
         for (const p of hitPoints) if (p.distanceTo(t.obj.position) < HIT_RADIUS) hit = true;
         if (autoHit && t.obj.position.z > REACH_Z - 0.08) hit = true;
-        if (hit) this.hit(t);
+        if (hit && this.hits < HITS_PER_ROLE) this.hit(t);
         else if (t.obj.position.z > 0.6) t.state = 'miss';
       } else if (t.state === 'hit') {
         const r = t.post(dt);
@@ -322,6 +341,9 @@ export class Targets {
           this.scene.remove(t.shadow);
           this.active.splice(i, 1);
           this.hanging.attach(t.obj);
+          // attach re-derives the Euler angles (a Y flip can come back as X+Z flips),
+          // so sway around whatever Z it ended up with
+          t.obj.userData.rz0 = t.obj.rotation.z;
           continue;
         }
         if (r) t.state = 'gone';
@@ -345,7 +367,7 @@ export class Targets {
     }
     // hanging cards / polaroids sway gently
     this.hanging.children.forEach((h, i) => {
-      h.rotation.z = Math.sin(performance.now() * 0.0015 + i) * 0.06;
+      h.rotation.z = (h.userData.rz0 ?? 0) + Math.sin(performance.now() * 0.0015 + i) * 0.06;
     });
     if (this.running) {
       const done = this.hits >= HITS_PER_ROLE || (this.spawned >= TARGETS_PER_ROLE && this.active.every((a) => a.state !== 'fly'));

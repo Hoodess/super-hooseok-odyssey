@@ -65,6 +65,10 @@ export class Audio {
         [784, 988, 1175, 1568, 1976].forEach((f, i) => this.tone(now + 0.09 * i, f, f, 0.4, 'square', 0.12));
         this.tone(now + 0.5, 1568, 1568, 0.8, 'triangle', 0.2);
         break;
+      case 'start':
+        [988, 1319, 1568, 1976, 2637].forEach((f, i) => this.tone(now + 0.06 * i, f, f, 0.16, 'square', 0.14));
+        this.tone(now + 0.32, 1976, 1976, 0.5, 'triangle', 0.22);
+        break;
       case 'ding': this.tone(now, 1568, 1568, 0.6, 'triangle', 0.3); this.tone(now, 2093, 2093, 0.6, 'sine', 0.2); break;
     }
   }

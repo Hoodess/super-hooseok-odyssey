@@ -19,13 +19,13 @@ import { makeCappyEyes, updateEyes, setExpression, setBaseExpression } from './e
 import { Roulette } from './roulette.js';
 import { Targets } from './targets.js';
 import { makeMoon, MoonHUD, updateMoon } from './moon.js';
+import { TitleScreen } from './title.js';
+import { ALL_TEXT, UI } from './texts.js';
 import { assetTexture, canvas, blobShadow } from './textures.js';
 
 // Canvas text does not trigger @font-face loading, and the Korean face is split
 // by unicode range, so ask for every glyph the game draws up front.
-document.fonts.load("80px 'Jua'", [
-  ...ROLES.flatMap((r) => [r.name, r.en, ...r.hitTexts]), 'POWER MOON! HOOSEOK 0123456789+',
-].join(''));
+document.fonts.load("80px 'Jua'", ALL_TEXT);
 
 const params = new URLSearchParams(location.search);
 const BASE = import.meta.env.BASE_URL;
@@ -262,6 +262,16 @@ const logo = new THREE.Mesh(
 logo.visible = false;
 scene.add(logo);
 
+const title = new TitleScreen(scene);
+title.onStart = () => {
+  fx.halftone(0xe8302a, () => {
+    title.hide();
+    world.setVoid(false);
+    hud.group.visible = true;
+    enterHub();
+  }, { cover: 0.35, hold: 0.1, reveal: 0.6 });
+};
+
 // ---------- state machine ----------
 
 let state = 'hub';
@@ -286,6 +296,7 @@ function placeRoulette() {
 }
 
 function pressButton() {
+  if (state === 'title') return title.press(audio);
   if (state === 'end') return resetAll();
   if (state !== 'hub' && state !== 'idle') return;
   audio.play('press');
@@ -380,7 +391,7 @@ function moonSequence(i) {
   audio.play('moon');
   eyesAll((e) => { setExpression(e, 'wow', 0.5); setBaseExpression(e, 'idle'); });
   later(0.6, () => eyesAll((e) => setExpression(e, 'happy', 1.6)));
-  fx.text('POWER MOON!', show.clone().add(new THREE.Vector3(0, 0.2, 0)), hexStr(role.color), { height: 0.1, life: 1.8 });
+  fx.text(UI.powerMoon, show.clone().add(new THREE.Vector3(0, 0.2, 0)), hexStr(role.color), { height: 0.1, life: 1.8 });
   anims.push({
     t: 0,
     dur: 2.4,
@@ -416,22 +427,22 @@ function startFinale() {
   state = 'finale';
   roulette.show();
   placeRoulette();
+  roulette.setHubLabel(UI.finaleHub, '#ffffff');
   audio.play('roulette');
-  roulette.spinTo(0, {
-    turns: 9,
-    duration: 3.4,
-    finale: true,
-    onTick: () => audio.play('tick'),
-    onDone: () => {
-      audio.play('ding');
-      roulette.setHubLabel('HOOSEOK', '#ffffff');
-      later(0.7, worldMontage);
+  eyesAll((e) => { setBaseExpression(e, 'dizzy'); setExpression(e, 'wow', 0.4); });
+  // the wheel never lands: it keeps speeding up and the worlds start flashing by
+  let lastTick = 0;
+  roulette.spinForever({
+    onTick: () => {
+      const now = performance.now();
+      if (now - lastTick > 45) audio.play('tick');
+      lastTick = now;
     },
   });
+  later(2.6, worldMontage);
 }
 
 function worldMontage() {
-  roulette.hide();
   targets.reset();
   world.clearProps();
   const seq = [...ROLES, ...ROLES];
@@ -451,6 +462,8 @@ function worldMontage() {
 
 function finaleEnd() {
   fx.halftone(0xffd36b, () => {
+    roulette.hide();
+    hud.group.visible = false;
     world.setRole(HUB, 0);
     skin.setRole(HUB);
   }, { cover: 0.2, hold: 0.05, reveal: 0.7 });
@@ -506,7 +519,17 @@ function resetAll() {
   collected = new Set();
   next = 0;
   roulette.hide();
-  enterHub();
+  enterTitle();
+}
+
+function enterTitle() {
+  state = 'title';
+  world.setRole(HUB, 0);
+  skin.setRole(HUB);
+  world.setVoid(true);
+  hud.group.visible = false;
+  title.show(headY);
+  eyesAll((e) => { setBaseExpression(e, 'idle'); setExpression(e, 'idle', 0); });
 }
 
 function enterHub() {
@@ -526,17 +549,28 @@ let buttonArmed = true;
 window.addEventListener('keydown', (e) => {
   audio.unlock();
   const k = e.key.toLowerCase();
-  if (k === ' ') { e.preventDefault(); pressButton(); }
-  else if (k >= '1' && k <= '5') { anims.length = 0; timers.length = 0; logo.visible = false; transformTo(+k - 1); }
+  if (k === ' ' || k === 'enter') { e.preventDefault(); pressButton(); }
+  else if (k >= '1' && k <= '5') { leaveTitle(); anims.length = 0; timers.length = 0; logo.visible = false; transformTo(+k - 1); }
   else if (k === '0') resetAll();
-  else if (k === 'f') { anims.length = 0; timers.length = 0; next = ROLES.length; state = 'idle'; startFinale(); }
+  else if (k === 'f') { leaveTitle(); anims.length = 0; timers.length = 0; next = ROLES.length; state = 'idle'; startFinale(); }
   else if (k === 'a') autoHit = !autoHit;
   else if (k === 'c') { cinematic = !cinematic; desk.visible = !cinematic; }
   else if (k === 'h') { hud.group.visible = !hud.group.visible; helpEl.style.display = hud.group.visible ? '' : 'none'; }
   else if (k === 'g') desk.visible = !desk.visible;
-  else if (k === 'm') { anims.length = 0; timers.length = 0; targets.reset(); moonSequence(Math.min(next, ROLES.length - 1)); }
+  else if (k === 'm') { leaveTitle(); anims.length = 0; timers.length = 0; targets.reset(); moonSequence(Math.min(next, ROLES.length - 1)); }
 });
-window.addEventListener('pointerdown', () => audio.unlock());
+window.addEventListener('pointerdown', (e) => {
+  audio.unlock();
+  if (state === 'title' && e.target === renderer.domElement) title.press(audio);
+});
+
+// director-mode jumps skip the title screen
+function leaveTitle() {
+  if (state !== 'title') return;
+  title.hide();
+  world.setVoid(false);
+  hud.group.visible = true;
+}
 
 renderer.xr.addEventListener('sessionstart', () => {
   audio.unlock();
@@ -545,6 +579,7 @@ renderer.xr.addEventListener('sessionstart', () => {
     const p = camera.getWorldPosition(new THREE.Vector3());
     if (p.y > 0.8) headY = p.y;
     hud.place(headY);
+    if (state === 'title') title.show(headY);
   });
 });
 renderer.xr.addEventListener('sessionend', () => {
@@ -660,6 +695,10 @@ renderer.setAnimationLoop(() => {
       if (f) hitPoints.push(f);
     }
     if (state === 'spin' || state === 'finale') placeRoulette();
+    if (state === 'title') {
+      const tips = [left, right].map((h) => jointPos(h, 'index-finger-tip', new THREE.Vector3())).filter(Boolean);
+      if (title.poked(tips)) title.press(audio);
+    }
   }
 
   // button glow pulse
@@ -673,6 +712,7 @@ renderer.setAnimationLoop(() => {
   skin.update(dt);
   world.update(t, dt);
   roulette.update(dt, t);
+  title.update(dt, t);
   targets.update(dt, hitPoints, !xr && autoHit, camera.getWorldPosition(tmpA));
   hud.update(dt, t);
   fx.update(dt);
@@ -681,4 +721,4 @@ renderer.setAnimationLoop(() => {
   else composer.render();
 });
 
-enterHub();
+enterTitle();

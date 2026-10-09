@@ -60,6 +60,7 @@ export class World {
     );
     sky.renderOrder = -10;
     this.group.add(sky);
+    this.sky = sky;
 
     const panoGeo = new THREE.CylinderGeometry(
       PANO_RADIUS, PANO_RADIUS, (PANO_RADIUS * PANO_ARC) / 1.5, 96, 1, true,
@@ -156,6 +157,11 @@ export class World {
     LOOK.rimColor.value.setHex(l.rim);
     LOOK.shadowTint.value.setHex(l.shadow);
     this.island.setRole(role);
+  }
+
+  // Black void for the title screen: hide the scenery but keep the lights.
+  setVoid(on) {
+    for (const o of [this.sky, this.pano, this.island.group, this.ring, this.dust, this.props]) o.visible = !on;
   }
 
   clearProps() {

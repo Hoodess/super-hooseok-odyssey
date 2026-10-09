@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { toon } from './gloveProps.js';
 
 // Cappy's eyes on the back of the left glove, with expressions.
 // Bone space: the face looks out along +Y; "up" on the face is -Z (toward the
 // fingertips). Each eye is a white dome with a big pupil and two highlights;
-// alternate shapes (^ arcs, > < chevrons) swap in for expressions.
+// alternate shapes (^ arcs, > < chevrons) swap in for expressions. All unlit so
+// the face reads the same under every role's lighting.
 //
 //   idle   open, blinking, pupils drifting
 //   focus  slightly lowered lids, brows angled in
@@ -30,7 +30,7 @@ function makeEye(side) {
   eye.position.set(side * 0.0138, 0, 0);
 
   const open = new THREE.Group();
-  const white = new THREE.Mesh(new THREE.SphereGeometry(EYE_R, 24, 16), toon(0xffffff, { spec: 0.6 }));
+  const white = new THREE.Mesh(new THREE.SphereGeometry(EYE_R, 24, 16), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   white.scale.set(0.82, 0.52, 1.12);
   const hull = new THREE.Mesh(white.geometry, new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
   hull.scale.set(0.82 * 1.16, 0.52 * 1.16, 1.12 * 1.13);

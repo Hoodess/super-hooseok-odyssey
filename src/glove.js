@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { assetTexture, glovePlaceholder, glowTexture } from './textures.js';
+import { glowTexture } from './textures.js';
 import { buildProps, toon } from './gloveProps.js';
 
 // In WebXR joint space (and in the generic hand model's bones), +Y points out
@@ -28,13 +28,8 @@ export class GloveSkin {
 
   setRole(role) {
     const m = this.material;
-    if (role.glove) {
-      m.map = assetTexture(role.glove, glovePlaceholder(role));
-      m.color.setHex(0xe4e4e4); // a touch under white so pale textures keep detail
-    } else {
-      m.map = null;
-      m.color.setHex(role.color);
-    }
+    m.map = null; // solid color for now; textures fought the toon look
+    m.color.setHex(role.glove ?? role.color);
     this.baseEmissive.setHex(role.color).multiplyScalar(0.12);
     m.emissive.copy(this.baseEmissive);
     m.needsUpdate = true;
