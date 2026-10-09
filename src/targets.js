@@ -126,11 +126,12 @@ export class Targets {
     this.hits++;
     const pos = t.obj.position.clone();
     const color = role.color;
-    this.fx.burst(pos, color, { count: 70, speed: 3.2 });
-    this.fx.burst(pos, 0xffffff, { count: 25, speed: 1.6, size: 0.04 });
-    this.fx.ring(pos, color, this.camPos);
-    this.fx.glow(pos, color, 0.7);
-    this.fx.text(role.hitTexts[(this.hits - 1) % role.hitTexts.length], pos.clone().add(new THREE.Vector3(0, 0.18, 0)), hexStr(color));
+    this.fx.impact(pos, color, this.camPos);
+    this.fx.ring(pos, color, this.camPos, { radius: 0.4, life: 0.35 });
+    this.fx.burst(pos, color, { count: 24, speed: 2, size: 0.05, life: 0.5 });
+    this.fx.glow(pos, color, 0.6, 0.3);
+    this.debris(role.target, pos);
+    this.fx.text(role.hitTexts[(this.hits - 1) % role.hitTexts.length], pos.clone().add(new THREE.Vector3(0, 0.2, 0)), hexStr(color), { height: 0.1 });
     this.audio.play('hit');
     this.onHit?.(t);
 
@@ -232,6 +233,31 @@ export class Targets {
     }
   }
 
+  // Role-flavored debris thrown out of every hit.
+  debris(type, pos) {
+    const fx = this.fx;
+    const g = DEBRIS();
+    switch (type) {
+      case 'paper':
+        fx.shards(pos, g.paper, [0xfffaf0, 0xf3ead7, 0xffe45c, 0xff9de0], { count: 16, speed: 2.2, gravity: -2.5, life: 1.3 });
+        fx.shards(pos, g.dot, [0xe8302a], { count: 10, speed: 3, life: 0.7 });
+        break;
+      case 'block':
+        fx.shards(pos, g.cube, [0x1f7bff, 0xe8f1ff, 0x7fd4ff, 0xffd21a], { count: 16, speed: 2.8, life: 1.0 });
+        break;
+      case 'mesh':
+        fx.shards(pos, g.pixel, [0x3dff8a, 0xff5fa2, 0x5fd3ff, 0xffd25f], { count: 22, speed: 3, life: 0.9, glowing: true, gravity: -2 });
+        break;
+      case 'card':
+        fx.shards(pos, g.star, [0xf2c14e, 0xffffff, 0xc58bff], { count: 16, speed: 2.4, life: 1.2, glowing: true, gravity: -1.2 });
+        break;
+      case 'polaroid':
+        fx.shards(pos, g.confetti, [0xffc21a, 0xff8a3d, 0xffffff, 0x5fd3ff, 0xe8302a], { count: 24, speed: 2.6, gravity: -2, life: 1.4 });
+        fx.shards(pos, g.star, [0xfff3b0], { count: 6, speed: 2, life: 0.8, glowing: true });
+        break;
+    }
+  }
+
   raiseBuilding() {
     const h = 2.5 + Math.random() * 6;
     const w = 1 + Math.random() * 1.6;
@@ -306,4 +332,25 @@ export class Targets {
       }
     }
   }
+}
+
+let debrisGeo = null;
+function DEBRIS() {
+  if (debrisGeo) return debrisGeo;
+  const star = new THREE.Shape();
+  for (let i = 0; i <= 10; i++) {
+    const r = i % 2 ? 0.009 : 0.022;
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    if (i) star.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else star.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  debrisGeo = {
+    paper: new THREE.BoxGeometry(0.05, 0.002, 0.065),
+    dot: new THREE.SphereGeometry(0.01, 8, 6),
+    cube: new THREE.BoxGeometry(0.045, 0.045, 0.045),
+    pixel: new THREE.BoxGeometry(0.026, 0.026, 0.026),
+    star: new THREE.ExtrudeGeometry(star, { depth: 0.006, bevelEnabled: false }),
+    confetti: new THREE.BoxGeometry(0.03, 0.002, 0.018),
+  };
+  return debrisGeo;
 }

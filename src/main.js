@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import '@fontsource/jua/korean-400.css';
+import '@fontsource/jua/latin-400.css';
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -15,8 +17,14 @@ import { Audio } from './audio.js';
 import { GloveSkin, makeCappyEyes, updateEyes, makeHandButton, BACK_OF_HAND } from './glove.js';
 import { Roulette } from './roulette.js';
 import { Targets } from './targets.js';
-import { makeMoon, MoonHUD } from './moon.js';
+import { makeMoon, MoonHUD, updateMoon } from './moon.js';
 import { assetTexture, canvas } from './textures.js';
+
+// Canvas text does not trigger @font-face loading, and the Korean face is split
+// by unicode range, so ask for every glyph the game draws up front.
+document.fonts.load("80px 'Jua'", [
+  ...ROLES.flatMap((r) => [r.name, r.en, ...r.hitTexts]), 'POWER MOON! HOOSEOK 0123456789+',
+].join(''));
 
 const params = new URLSearchParams(location.search);
 const BASE = import.meta.env.BASE_URL;
@@ -301,20 +309,40 @@ function transformTo(i) {
   const role = ROLES[i];
   next = i;
   state = 'transform';
-  fx.flash(0xffffff, 0.8);
   audio.play('transform');
   const gp = gloveAnchor();
-  fx.burst(gp, role.color, { count: 140, speed: 2.2, size: 0.05 });
-  fx.ring(gp, role.color, camera.getWorldPosition(new THREE.Vector3()), { radius: 0.5 });
-  targets.reset();
-  world.clearProps();
-  world.setRole(role, 0);
-  skin.setRole(role);
-  later(0.35, () => showTitle(role));
+  const camPos = camera.getWorldPosition(new THREE.Vector3());
+  // Cappy's eyes flash, then the role color bursts out of the glove and
+  // swallows the view; the world swaps while it covers everything.
+  skin.pulse();
+  allEyes.forEach((e) => fx.glow(e.getWorldPosition(new THREE.Vector3()), 0xffffff, 0.35, 0.35));
+  fx.impact(gp, role.color, camPos, { size: 0.5, life: 0.4 });
+  fx.shards(gp, starShard(), [role.color, 0xffffff, 0xffe45c], { count: 20, speed: 2.4, life: 1.1, glowing: true, gravity: -0.6, up: 0.4 });
+  later(0.12, () => fx.wipe(gp, role.color, camPos, () => {
+    targets.reset();
+    world.clearProps();
+    world.setRole(role, 0);
+    skin.setRole(role);
+    fx.burst(gp, role.color, { count: 60, speed: 2, size: 0.05 });
+  }));
+  later(0.6, () => showTitle(role));
   later(1.6, () => {
     state = 'play';
     targets.start(role, headY, () => later(0.4, () => moonSequence(i)));
   });
+}
+
+let starGeo = null;
+function starShard() {
+  if (starGeo) return starGeo;
+  const sh = new THREE.Shape();
+  for (let i = 0; i <= 10; i++) {
+    const r = i % 2 ? 0.01 : 0.025;
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 2;
+    if (i) sh.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else sh.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  return (starGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.006, bevelEnabled: false }));
 }
 
 function gloveAnchor() {
@@ -338,7 +366,8 @@ function moonSequence(i) {
     t: 0,
     dur: 2.4,
     step(k, t) {
-      moon.rotation.y = t * 8;
+      moon.rotation.y = t < 1.6 ? t * 8 * Math.max(0.25, 1 - t / 0.8) : t * 2;
+      updateMoon(moon, t);
       if (t < 0.6) moon.position.lerpVectors(from, show, 1 - Math.pow(1 - t / 0.6, 3));
       else if (t < 1.6) moon.position.y = show.y + Math.sin((t - 0.6) * 4) * 0.02;
       else {
@@ -417,6 +446,7 @@ function finaleEnd() {
         const a = t * 0.8 + (i / 5) * Math.PI * 2;
         m.position.set(Math.cos(a) * 0.9, headY + 0.15 + Math.sin(t * 2 + i) * 0.05, Math.sin(a) * 0.9 - 0.2);
         m.rotation.y = t * 3;
+        updateMoon(m, t + i);
       });
     },
     done() {},
@@ -480,6 +510,7 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'c') { cinematic = !cinematic; desk.visible = !cinematic; }
   else if (k === 'h') { hud.group.visible = !hud.group.visible; helpEl.style.display = hud.group.visible ? '' : 'none'; }
   else if (k === 'g') desk.visible = !desk.visible;
+  else if (k === 'm') { anims.length = 0; timers.length = 0; targets.reset(); moonSequence(Math.min(next, ROLES.length - 1)); }
 });
 window.addEventListener('pointerdown', () => audio.unlock());
 
@@ -507,6 +538,8 @@ const clock = new THREE.Clock();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 let hitstop = 0;
+// ?tilt=<rad> pitches the desktop camera down, e.g. to check the island
+const TILT = Number(params.get('tilt')) || 0;
 
 targets.onHit = (t) => {
   hitstop = 0.06;
@@ -530,7 +563,7 @@ renderer.setAnimationLoop(() => {
       camera.lookAt(0, 1.45, -2.5);
     } else {
       camera.position.set(0, 1.6, 0);
-      camera.rotation.set(Math.sin(t * 0.3) * 0.015 - 0.04, Math.sin(t * 0.21) * 0.02, 0);
+      camera.rotation.set(Math.sin(t * 0.3) * 0.015 - 0.04 - TILT, Math.sin(t * 0.21) * 0.02, 0);
     }
     updateDeskHands(dt, t);
   }

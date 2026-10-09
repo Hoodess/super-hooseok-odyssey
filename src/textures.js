@@ -269,18 +269,28 @@ export function photoPlaceholder(i) {
 
 // ---------- text + glow ----------
 
-export function textCanvas(text, { size = 120, color = '#fff', stroke = '#000', font = 'sans-serif', pad = 30 } = {}) {
+// Text is drawn in the bundled Jua font (rounded, chunky, reads like game UI).
+// `inner` adds a second, inner outline: dark outer stroke, light inner stroke, fill.
+export const FONT = "'Jua', sans-serif";
+export function textCanvas(text, { size = 120, color = '#fff', stroke = '#000', inner = null, font = FONT, pad = 30 } = {}) {
   const probe = document.createElement('canvas').getContext('2d');
-  probe.font = `900 ${size}px ${font}`;
+  probe.font = `${size}px ${font}`;
   const tw = Math.ceil(probe.measureText(text).width);
+  const outer = inner ? size * 0.34 : size * 0.18;
+  pad = Math.max(pad, outer);
   return canvas(tw + pad * 2, size * 1.4 + pad, (g, w, h) => {
-    g.font = `900 ${size}px ${font}`;
+    g.font = `${size}px ${font}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
-    g.lineWidth = size * 0.16;
+    g.lineWidth = outer;
     g.strokeStyle = stroke;
     g.strokeText(text, w / 2, h / 2);
+    if (inner) {
+      g.lineWidth = size * 0.16;
+      g.strokeStyle = inner;
+      g.strokeText(text, w / 2, h / 2);
+    }
     g.fillStyle = color;
     g.fillText(text, w / 2, h / 2);
   });

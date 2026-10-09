@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { glowTexture, makeTextSprite } from './textures.js';
+import { glowTexture, makeTextSprite, canvas } from './textures.js';
+import { toon } from './gloveProps.js';
 
 // Short-lived visual effects: particle bursts, shockwave rings, floating text,
 // the full-view flash used for transformations.
@@ -54,7 +55,8 @@ export class FX {
   }
 
   text(str, pos, color = '#ffffff', { height = 0.09, life = 1.1 } = {}) {
-    const s = makeTextSprite(str, { color, stroke: '#1a1a1a', height });
+    const s = makeTextSprite(str, { color, stroke: '#1a1030', inner: '#ffffff', height });
+    s.material.rotation = (Math.random() - 0.5) * 0.25;
     s.position.copy(pos);
     this.scene.add(s);
     this.items.push({ kind: 'text', obj: s, t: 0, life, base: height, start: pos.clone() });
@@ -69,6 +71,59 @@ export class FX {
     s.scale.setScalar(size);
     this.scene.add(s);
     this.items.push({ kind: 'glow', obj: s, t: 0, life, size });
+  }
+
+  // Chunky debris: an instanced burst of small toon (or glowing) pieces that
+  // tumble, fall and shrink away. `geo` is any small geometry.
+  shards(pos, geo, colors, { count = 18, speed = 2.6, life = 1.0, gravity = -5, size = 1, glowing = false, up = 1.2 } = {}) {
+    const mat = glowing
+      ? new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+      : toon(0xffffff);
+    const mesh = new THREE.InstancedMesh(geo, mat, count);
+    mesh.frustumCulled = false;
+    const parts = [];
+    const c = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      const v = new THREE.Vector3().randomDirection().multiplyScalar(speed * (0.4 + Math.random() * 0.6));
+      v.y += up;
+      parts.push({
+        p: pos.clone(), v,
+        axis: new THREE.Vector3().randomDirection(), spin: (Math.random() - 0.5) * 16,
+        s: size * (0.6 + Math.random() * 0.6), q: new THREE.Quaternion().random(),
+      });
+      mesh.setColorAt(i, c.setHex(colors[i % colors.length]));
+    }
+    this.scene.add(mesh);
+    this.items.push({ kind: 'shards', obj: mesh, parts, t: 0, life, gravity, ownGeo: false });
+  }
+
+  // Comic hit spark: a spiky white star with a colored rim that pops and fades.
+  impact(pos, color, facing, { size = 0.42, life = 0.32 } = {}) {
+    const mat = new THREE.SpriteMaterial({
+      map: impactTexture(), color, transparent: true, depthWrite: false, toneMapped: false,
+    });
+    mat.rotation = Math.random() * Math.PI;
+    const sp = new THREE.Sprite(mat);
+    sp.position.copy(pos);
+    if (facing) sp.position.lerp(facing, 0.04);
+    sp.renderOrder = 15;
+    this.scene.add(sp);
+    this.items.push({ kind: 'impact', obj: sp, t: 0, life, size });
+  }
+
+  // Cappy-style capture wipe: a sphere of the role color grows out of the glove,
+  // swallows the viewer (onCover fires then, to swap the world) and fades.
+  wipe(center, color, camPos, onCover, { life = 0.9 } = {}) {
+    const mat = new THREE.MeshBasicMaterial({
+      color, transparent: true, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false,
+    });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), mat);
+    m.position.copy(center);
+    m.renderOrder = 90;
+    m.scale.setScalar(0.01);
+    this.scene.add(m);
+    const coverAt = center.distanceTo(camPos) + 0.25;
+    this.items.push({ kind: 'wipe', obj: m, t: 0, life, coverAt, onCover, covered: false });
   }
 
   flash(color = 0xffffff, dur = 0.6) {
@@ -89,7 +144,7 @@ export class FX {
       const k = it.t / it.life;
       if (k >= 1) {
         this.scene.remove(it.obj);
-        it.obj.geometry?.dispose();
+        if (it.kind !== 'shards') it.obj.geometry?.dispose();
         it.obj.material.dispose();
         this.items.splice(i, 1);
         continue;
@@ -113,10 +168,62 @@ export class FX {
         it.obj.scale.set((s * it.obj.scale.x) / it.obj.scale.y, s, 1);
         it.obj.position.y = it.start.y + k * 0.25;
         it.obj.material.opacity = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+      } else if (it.kind === 'shards') {
+        const m4 = new THREE.Matrix4();
+        const dq = new THREE.Quaternion();
+        const sc = new THREE.Vector3();
+        it.parts.forEach((pt, j) => {
+          pt.v.y += it.gravity * dt;
+          pt.v.multiplyScalar(1 - dt * 1.2);
+          pt.p.addScaledVector(pt.v, dt);
+          pt.q.multiply(dq.setFromAxisAngle(pt.axis, pt.spin * dt));
+          const s = pt.s * (k > 0.6 ? 1 - (k - 0.6) / 0.4 : Math.min(1, k * 12));
+          it.obj.setMatrixAt(j, m4.compose(pt.p, pt.q, sc.setScalar(Math.max(0.001, s))));
+        });
+        it.obj.instanceMatrix.needsUpdate = true;
+      } else if (it.kind === 'impact') {
+        const pop = k < 0.25 ? 1 - Math.pow(1 - k / 0.25, 3) : 1 + (k - 0.25) * 0.4;
+        it.obj.scale.setScalar(it.size * pop);
+        it.obj.material.opacity = k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5;
+      } else if (it.kind === 'wipe') {
+        const grow = 1 - Math.pow(1 - Math.min(1, k / 0.45), 3);
+        const r = 0.01 + grow * (it.coverAt * 1.6 + 1);
+        it.obj.scale.setScalar(r);
+        if (!it.covered && r > it.coverAt) {
+          it.covered = true;
+          it.onCover?.();
+        }
+        it.obj.material.opacity = k < 0.45 ? 0.95 : 0.95 * (1 - (k - 0.45) / 0.55);
       } else if (it.kind === 'glow') {
         it.obj.scale.setScalar(it.size * (1 + k));
         it.obj.material.opacity = 1 - k;
       }
     }
   }
+}
+
+let impactTex = null;
+function impactTexture() {
+  if (impactTex) return impactTex;
+  impactTex = new THREE.CanvasTexture(canvas(256, 256, (g, w, h) => {
+    const spikes = 9;
+    const path = (r1, r2) => {
+      g.beginPath();
+      for (let i = 0; i <= spikes * 2; i++) {
+        const r = (i % 2 ? r2 : r1) * (0.85 + ((i * 37) % 7) / 40);
+        const a = (i / (spikes * 2)) * Math.PI * 2;
+        const fn = i ? 'lineTo' : 'moveTo';
+        g[fn](w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r);
+      }
+      g.closePath();
+    };
+    path(124, 62);
+    g.fillStyle = '#ffffff';
+    g.fill();
+    path(92, 44);
+    g.fillStyle = '#fffbe8';
+    g.fill();
+  }));
+  impactTex.colorSpace = THREE.SRGBColorSpace;
+  return impactTex;
 }

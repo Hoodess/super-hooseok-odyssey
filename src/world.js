@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { assetTexture, bgPlaceholder, glowTexture } from './textures.js';
+import { Island } from './island.js';
 
 // The world around the player: gradient sky dome, a 200-degree panorama band
 // in front (GPT images are not seamless 360s, so the edges fade into the sky),
@@ -80,15 +81,12 @@ export class World {
     this.pano.renderOrder = -9;
     this.group.add(this.pano);
 
-    // platform
-    const platMat = new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.35, metalness: 0.4 });
-    const plat = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.0, 0.35, 64), platMat);
-    plat.position.y = -0.18;
-    this.group.add(plat);
-    this.ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.025, 12, 96), this.ringMat);
+    // platform: a floating toon island whose surface and props follow the role
+    this.island = new Island(this.group);
+    this.ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, transparent: true, opacity: 0.5 });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.012, 8, 96), this.ringMat);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0;
+    ring.position.y = -0.02;
     this.group.add(ring);
     this.ring = ring;
 
@@ -140,6 +138,7 @@ export class World {
     this.dustMat.color.copy(c).lerp(new THREE.Color(0xffffff), 0.5);
     this.hemi.color.copy(c).lerp(new THREE.Color(0xffffff), 0.6);
     this.rim.color.copy(c);
+    this.island.setRole(role);
   }
 
   clearProps() {
