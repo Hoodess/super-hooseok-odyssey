@@ -21,6 +21,9 @@ export function assetTexture(file, makePlaceholder) {
   loader.load(
     assetUrl(file),
     (loaded) => {
+      // If the placeholder was already drawn, WebGL2 holds immutable storage at its
+      // size; dispose so the real image (a different size) gets fresh storage.
+      tex.dispose();
       tex.image = loaded.image;
       tex.needsUpdate = true;
       tex.userData.loaded = true;
