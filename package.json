@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
+    "dev:usb": "USB=1 vite --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview"
   },
