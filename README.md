@@ -13,6 +13,29 @@
 - 배포: HTTPS 필요 (GitHub Pages 또는 Netlify)
 - 두 모드: **XR 모드**(헤드셋 1인칭 플레이·녹화) / **감독 모드**(PC 키보드, 트레일러 샷)
 
+## 실행
+
+```bash
+npm install
+npm run dev      # https://<PC IP>:5173 — 같은 Wi-Fi의 Quest 3 브라우저로 접속 (인증서 경고는 '계속')
+npm run build    # dist/ 생성
+```
+
+`main`에 푸시하면 GitHub Actions가 GitHub Pages로 배포한다.
+
+### 감독 모드 키 (PC)
+
+| 키 | 동작 |
+|---|---|
+| Space | 룰렛 / 다음 단계 |
+| 1 ~ 5 | 롤 바로가기 |
+| F | 피날레 |
+| 0 | 처음으로 |
+| A | 자동 타격 켜기/끄기 |
+| C | 시네마틱 카메라 |
+| G | 장갑 표시 |
+| H | 안내·HUD 숨기기 |
+
 ## 다섯 개의 롤
 
 | # | 롤 | 컬러 | 대상 | 맞혔을 때 |
@@ -35,7 +58,7 @@
 
 ## 에셋 폴더
 
-생성물은 기획서의 파일명을 그대로 지켜 넣는다.
+생성물은 기획서의 파일명을 그대로 지켜 넣는다. `assets/`는 사이트 루트로 서빙되고, 파일이 없으면 코드 안의 임시 그림·합성음이 대신 나온다.
 
 ```
 assets/
@@ -44,7 +67,8 @@ assets/
   tarot/   tarot_back, tarot_1~5 (.png, 1024×1536)
   images/  paper_cover, stamp_accepted, still_open, still_five (.png)
   sfx/     sfx_roulette, sfx_transform, sfx_moon (.mp3) + CC0 효과음
-  photos/  실제 여행 사진 5장
+  photos/  실제 여행 사진 5장 (photo_1.jpg ~ photo_5.jpg)
+  models/  WebXR 기본 손 모델 (장갑 메시)
 ```
 
 오픈소스 에셋의 라이선스와 출처는 `CREDITS.md`에 기록한다.

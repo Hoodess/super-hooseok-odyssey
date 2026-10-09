@@ -1,0 +1,308 @@
+import * as THREE from 'three';
+import { HITS_PER_ROLE, TARGETS_PER_ROLE } from './roles.js';
+import {
+  assetTexture, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
+} from './textures.js';
+
+// Spawns the role's targets, flies them at the player, resolves hits and plays
+// each role's hit reaction. Cards and polaroids stay hanging in the world.
+
+const SPAWN_Z = -12;
+const REACH_Z = -0.4;
+const SPEED = 4.2;
+const HIT_RADIUS = 0.17;
+const SPAWN_INTERVAL = 1.05;
+
+const hexStr = (n) => '#' + n.toString(16).padStart(6, '0');
+const easeOut = (k) => 1 - Math.pow(1 - k, 3);
+
+export class Targets {
+  constructor(scene, world, fx, audio) {
+    this.scene = scene;
+    this.world = world;
+    this.fx = fx;
+    this.audio = audio;
+    this.active = [];
+    this.hanging = new THREE.Group();
+    scene.add(this.hanging);
+    this.role = null;
+    this.running = false;
+    this.onComplete = null;
+    this.onHit = null;
+    this.tmp = new THREE.Vector3();
+  }
+
+  start(role, headY, onComplete) {
+    this.role = role;
+    this.headY = headY;
+    this.running = true;
+    this.spawned = 0;
+    this.hits = 0;
+    this.spawnT = 0.4;
+    this.onComplete = onComplete;
+    this.travelVariant = 0;
+  }
+
+  reset() {
+    this.running = false;
+    for (const t of this.active) this.scene.remove(t.obj);
+    this.active = [];
+    for (const h of [...this.hanging.children]) this.hanging.remove(h);
+  }
+
+  spawn() {
+    const role = this.role;
+    const lane = (this.spawned % 3) - 1 + (Math.random() - 0.5) * 0.5;
+    const end = new THREE.Vector3(lane * 0.28, this.headY - 0.3 + (Math.random() - 0.3) * 0.3, REACH_Z);
+    const start = new THREE.Vector3(end.x * 4, end.y + 1.2, SPAWN_Z);
+    const obj = this.build(role.target, this.spawned);
+    obj.position.copy(start);
+    this.scene.add(obj);
+    const vel = end.clone().sub(start).normalize().multiplyScalar(SPEED);
+    this.active.push({ obj, vel, state: 'fly', index: this.spawned, t: 0, spin: (Math.random() - 0.5) * 2 });
+    this.spawned++;
+  }
+
+  build(type, i) {
+    switch (type) {
+      case 'paper': {
+        const front = new THREE.MeshStandardMaterial({ map: assetTexture('paper_cover.png', paperPlaceholder), color: 0xd8d8d8, roughness: 0.9 });
+        const side = new THREE.MeshStandardMaterial({ color: 0xc9c5ba, roughness: 0.9 });
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.02), [side, side, side, side, front, side]);
+        return m;
+      }
+      case 'block': {
+        const g = new THREE.Group();
+        const geo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+        const fill = new THREE.MeshStandardMaterial({
+          color: 0x1f7bff, transparent: true, opacity: 0.12, emissive: 0x0a2a66, depthWrite: false,
+        });
+        g.add(new THREE.Mesh(geo, fill));
+        g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x9cc8ff, toneMapped: false })));
+        g.userData.fill = fill;
+        return g;
+      }
+      case 'mesh': {
+        const geos = [
+          new THREE.SphereGeometry(0.15, 32, 20),
+          new THREE.TorusGeometry(0.12, 0.05, 20, 48),
+          new THREE.TorusKnotGeometry(0.1, 0.035, 96, 14),
+          new THREE.IcosahedronGeometry(0.15, 0),
+        ];
+        return new THREE.Mesh(geos[i % geos.length], new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95, flatShading: i % 4 === 3 }));
+      }
+      case 'card': {
+        const g = new THREE.Group();
+        const geo = new THREE.PlaneGeometry(0.26, 0.4);
+        const back = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: assetTexture('tarot_back.png', tarotBackPlaceholder), roughness: 0.5 }));
+        const k = (i % 5) + 1;
+        const front = new THREE.Mesh(
+          geo,
+          new THREE.MeshStandardMaterial({ map: assetTexture(`tarot_${k}.png`, tarotFrontPlaceholder(i)), roughness: 0.5, emissive: 0x221133 }),
+        );
+        front.rotation.y = Math.PI;
+        g.add(back, front);
+        return g;
+      }
+      case 'polaroid': {
+        const g = new THREE.Group();
+        const frame = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.36), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, side: THREE.DoubleSide }));
+        const photoMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
+        const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.26), photoMat);
+        photo.position.set(0, 0.025, 0.002);
+        g.add(frame, photo);
+        g.userData.photoMat = photoMat;
+        return g;
+      }
+    }
+    return new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), new THREE.MeshStandardMaterial());
+  }
+
+  hit(t) {
+    const role = this.role;
+    t.state = 'hit';
+    t.t = 0;
+    this.hits++;
+    const pos = t.obj.position.clone();
+    const color = role.color;
+    this.fx.burst(pos, color, { count: 70, speed: 3.2 });
+    this.fx.burst(pos, 0xffffff, { count: 25, speed: 1.6, size: 0.04 });
+    this.fx.ring(pos, color, this.camPos);
+    this.fx.glow(pos, color, 0.7);
+    this.fx.text(role.hitTexts[(this.hits - 1) % role.hitTexts.length], pos.clone().add(new THREE.Vector3(0, 0.18, 0)), hexStr(color));
+    this.audio.play('hit');
+    this.onHit?.(t);
+
+    const slot = this.hanging.children.length;
+    const hangPos = new THREE.Vector3(-0.62 + (slot % 5) * 0.31, this.headY + 0.42 + Math.floor(slot / 5) * 0.45, -1.7);
+
+    switch (role.target) {
+      case 'paper': {
+        const stamp = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.26, 0.13),
+          new THREE.MeshBasicMaterial({ map: assetTexture('stamp_accepted.png', stampPlaceholder), transparent: true, toneMapped: false }),
+        );
+        stamp.position.z = 0.012;
+        stamp.rotation.z = -0.25;
+        t.obj.add(stamp);
+        t.stamp = stamp;
+        this.fx.burst(pos, 0xfff6e0, { count: 40, speed: 2.4, size: 0.05, gravity: -1.5 });
+        t.vel.set((Math.random() - 0.5) * 1.5, 2.2, -1.2);
+        t.post = (dt) => {
+          const k = t.t / 1.2;
+          stamp.scale.setScalar(k < 0.1 ? 2 - k * 10 : 1);
+          t.obj.rotation.x += dt * 4;
+          t.obj.position.addScaledVector(t.vel, dt);
+          return k >= 1;
+        };
+        break;
+      }
+      case 'block': {
+        const fill = t.obj.userData.fill;
+        fill.opacity = 1;
+        fill.transparent = false;
+        fill.depthWrite = true;
+        fill.color.setHex(0xe8f1ff);
+        fill.emissive.setHex(0x1f7bff);
+        fill.emissiveIntensity = 0.6;
+        this.raiseBuilding();
+        const from = t.obj.position.clone();
+        const to = new THREE.Vector3((Math.random() - 0.5) * 8, this.headY + 2.5, -10);
+        t.post = (dt) => {
+          const k = Math.min(1, t.t / 0.9);
+          t.obj.position.lerpVectors(from, to, easeOut(k));
+          t.obj.rotation.y += dt * 6;
+          t.obj.scale.setScalar(1 - k * 0.7);
+          return k >= 1;
+        };
+        break;
+      }
+      case 'mesh': {
+        const looks = [
+          new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.05 }),
+          new THREE.MeshToonMaterial({ color: [0xff5fa2, 0x5fd3ff, 0xffd25f, 0x7dff6b][this.hits % 4] }),
+          new THREE.MeshStandardMaterial({
+            color: 0x22d36b, emissive: 0x22d36b, emissiveIntensity: 1.2, transparent: true, opacity: 0.55, wireframe: true,
+          }),
+        ];
+        t.obj.material = looks[(this.hits - 1) % looks.length];
+        const from = t.obj.position.clone();
+        const to = new THREE.Vector3(from.x * 2.5, this.headY + 0.6, -2.2);
+        t.post = (dt) => {
+          const k = Math.min(1, t.t / 1.6);
+          t.obj.position.lerpVectors(from, to, easeOut(k));
+          t.obj.rotation.y += dt * 2.5;
+          t.obj.rotation.x += dt * 1.2;
+          if (k > 0.8) t.obj.scale.setScalar(1 - (k - 0.8) * 5);
+          return k >= 1;
+        };
+        break;
+      }
+      case 'card':
+      case 'polaroid': {
+        if (role.target === 'polaroid') {
+          const k = (t.index % 5) + 1;
+          const pm = t.obj.userData.photoMat;
+          pm.map = assetTexture(`photo_${k}.jpg`, photoPlaceholder(t.index));
+          pm.color.setHex(0xffffff);
+          pm.needsUpdate = true;
+          this.fx.flash(0xffffff, 0.25);
+          this.audio.play('shutter');
+          if (this.hits % 2 === 0 && role.bg.length > 1) {
+            this.travelVariant++;
+            this.world.setRole(role, this.travelVariant);
+          }
+        } else {
+          this.audio.play('card');
+        }
+        const from = t.obj.position.clone();
+        const startRot = t.obj.rotation.y;
+        t.post = (dt) => {
+          const k = Math.min(1, t.t / 1.0);
+          if (role.target === 'card') t.obj.rotation.y = startRot + Math.PI * easeOut(Math.min(1, t.t / 0.35));
+          if (t.t > 0.35) {
+            const m = easeOut(Math.min(1, (t.t - 0.35) / 0.65));
+            t.obj.position.lerpVectors(from, hangPos, m);
+          }
+          return k >= 1 ? 'hang' : false;
+        };
+        break;
+      }
+    }
+  }
+
+  raiseBuilding() {
+    const h = 2.5 + Math.random() * 6;
+    const w = 1 + Math.random() * 1.6;
+    const geo = new THREE.BoxGeometry(w, h, w);
+    geo.translate(0, h / 2, 0);
+    const b = new THREE.Group();
+    b.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdfe9ff, emissive: 0x0d3a8a, roughness: 0.4 })));
+    b.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x8fc1ff, toneMapped: false })));
+    const side = Math.random() < 0.5 ? -1 : 1;
+    b.position.set(side * (2.5 + Math.random() * 8), -1, -9 - Math.random() * 8);
+    b.scale.y = 0.001;
+    b.userData.grow = 0;
+    this.world.props.add(b);
+    this.fx.burst(b.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 0x9cc8ff, { count: 50, speed: 2.5, size: 0.15 });
+  }
+
+  update(dt, hitPoints, autoHit, camPos) {
+    this.camPos = camPos;
+    for (const b of this.world.props.children) {
+      if (b.userData.grow !== undefined && b.userData.grow < 1) {
+        b.userData.grow = Math.min(1, b.userData.grow + dt * 1.3);
+        b.scale.y = Math.max(0.001, easeOut(b.userData.grow));
+      }
+    }
+    if (this.running) {
+      this.spawnT -= dt;
+      if (this.spawnT <= 0 && this.spawned < TARGETS_PER_ROLE && this.hits < HITS_PER_ROLE) {
+        this.spawn();
+        this.spawnT = SPAWN_INTERVAL;
+      }
+    }
+    for (let i = this.active.length - 1; i >= 0; i--) {
+      const t = this.active[i];
+      t.t += dt;
+      if (t.state === 'fly') {
+        t.obj.position.addScaledVector(t.vel, dt);
+        t.obj.rotation.z = Math.sin(t.t * 2) * 0.2 * t.spin;
+        if (this.role.target === 'mesh' || this.role.target === 'block') t.obj.rotation.y += dt * t.spin;
+        let hit = false;
+        for (const p of hitPoints) if (p.distanceTo(t.obj.position) < HIT_RADIUS) hit = true;
+        if (autoHit && t.obj.position.z > REACH_Z - 0.08) hit = true;
+        if (hit) this.hit(t);
+        else if (t.obj.position.z > 0.6) t.state = 'miss';
+      } else if (t.state === 'hit') {
+        const r = t.post(dt);
+        if (r === 'hang') {
+          this.active.splice(i, 1);
+          this.hanging.attach(t.obj);
+          continue;
+        }
+        if (r) t.state = 'gone';
+      }
+      if (t.state === 'miss') {
+        t.obj.position.addScaledVector(t.vel, dt);
+        t.obj.scale.multiplyScalar(1 - dt * 6);
+        if (t.obj.scale.x < 0.05) t.state = 'gone';
+      }
+      if (t.state === 'gone') {
+        this.scene.remove(t.obj);
+        this.active.splice(i, 1);
+      }
+    }
+    // hanging cards / polaroids sway gently
+    this.hanging.children.forEach((h, i) => {
+      h.rotation.z = Math.sin(performance.now() * 0.0015 + i) * 0.06;
+    });
+    if (this.running) {
+      const done = this.hits >= HITS_PER_ROLE || (this.spawned >= TARGETS_PER_ROLE && this.active.every((a) => a.state !== 'fly'));
+      if (done && !this.active.some((a) => a.state === 'hit')) {
+        this.running = false;
+        this.onComplete?.();
+      }
+    }
+  }
+}
