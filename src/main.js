@@ -73,16 +73,46 @@ hud.place(headY);
 
 // ---------- gloves: XR hands ----------
 
-const handFactory = new XRHandModelFactory(null, (object) => {
+// Tags each loaded hand mesh with its side so a load that finishes after the slot
+// switched hands can be thrown away.
+const handGltf = new GLTFLoader().setPath(`${BASE}models/hands/`);
+const handLoader = {
+  load(url, onLoad) {
+    handGltf.load(url, (gltf) => {
+      gltf.scene.children[0].userData.handedness = url.startsWith('left') ? 'left' : 'right';
+      onLoad(gltf);
+    });
+  },
+};
+const handFactory = new XRHandModelFactory(handLoader, (object) => {
+  const handModel = object.parent;
+  if (object.userData.handedness !== handModel.userData.meshHandedness) {
+    handModel.remove(object);
+    return;
+  }
   skin.apply(object);
-  const handedness = object.parent?.xrInputSource?.handedness;
-  if (handedness === 'left') xrButton = attachEyes(object);
+  if (object.userData.handedness === 'left') xrButton = attachEyes(object);
 });
-handFactory.setPath(`${BASE}models/hands/`);
+// WebXR puts a reconnecting hand in whichever slot is free, so slot 0 can be the
+// left hand now and the right hand after tracking drops. three's factory builds a
+// slot's mesh only on its first connect, so rebuild it whenever the side changes.
+// This listener is added before the factory's so the slot is cleared first.
 const hands = [0, 1].map((i) => {
   const hand = renderer.xr.getHand(i);
-  hand.add(handFactory.createHandModel(hand, 'mesh'));
-  hand.addEventListener('connected', (e) => (hand.userData.handedness = e.data.handedness));
+  let handModel = null;
+  hand.addEventListener('connected', (e) => {
+    const side = e.data.handedness;
+    hand.userData.handedness = side;
+    if (handModel?.motionController && handModel.userData.meshHandedness !== side) {
+      detachEyes(handModel);
+      handModel.clear();
+      handModel.motionController = null;
+    }
+    if (handModel) handModel.userData.meshHandedness = side;
+  });
+  hand.addEventListener('disconnected', () => delete hand.userData.handedness);
+  handModel = handFactory.createHandModel(hand, 'mesh');
+  hand.add(handModel);
   scene.add(hand);
   return hand;
 });
@@ -106,6 +136,14 @@ function attachEyes(handObject) {
   allEyes.push(eyes);
   allButtons.push(button);
   return button;
+}
+
+function detachEyes(handModel) {
+  const inside = (o) => { for (let p = o.parent; p; p = p.parent) if (p === handModel) return true; return false; };
+  for (const list of [allEyes, allButtons]) {
+    for (let i = list.length - 1; i >= 0; i--) if (inside(list[i])) list.splice(i, 1);
+  }
+  if (xrButton && inside(xrButton)) xrButton = null;
 }
 
 function handByName(name) {
