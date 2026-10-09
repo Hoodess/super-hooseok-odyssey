@@ -15,11 +15,13 @@ import { World } from './world.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
 import { GloveSkin, makeHandButton, BACK_OF_HAND } from './glove.js';
+import { INFLATE } from './gloveProps.js';
 import { makeCappyEyes, updateEyes, setExpression, setBaseExpression } from './eyes.js';
 import { Roulette } from './roulette.js';
 import { Targets } from './targets.js';
 import { makeMoon, MoonHUD, updateMoon } from './moon.js';
 import { TitleScreen } from './title.js';
+import { Ending } from './ending.js';
 import { ALL_TEXT, UI } from './texts.js';
 import { assetTexture, canvas, blobShadow } from './textures.js';
 
@@ -138,11 +140,11 @@ function attachEyes(handObject) {
   const bone = handObject.getObjectByName('middle-finger-metacarpal');
   if (!bone) return null;
   const eyes = makeCappyEyes();
-  eyes.position.copy(BACK_OF_HAND).multiplyScalar(0.02);
+  eyes.position.copy(BACK_OF_HAND).multiplyScalar(0.02 + INFLATE);
   eyes.position.z -= 0.035; // -Z runs toward the fingers: center of the back of the hand
   bone.add(eyes);
   const button = makeHandButton();
-  button.position.copy(BACK_OF_HAND).multiplyScalar(0.018);
+  button.position.copy(BACK_OF_HAND).multiplyScalar(0.018 + INFLATE);
   button.position.z += 0.002;
   bone.add(button);
   allEyes.push(eyes);
@@ -263,11 +265,14 @@ logo.visible = false;
 scene.add(logo);
 
 const title = new TitleScreen(scene);
+const ending = new Ending(scene);
 title.onStart = () => {
   fx.halftone(0xe8302a, () => {
+    // stay in the black void with just the power moon row; the first
+    // transformation is what opens up a world
     title.hide();
-    world.setVoid(false);
     hud.group.visible = true;
+    hud.intro();
     enterHub();
   }, { cover: 0.35, hold: 0.1, reveal: 0.6 });
 };
@@ -343,6 +348,7 @@ function transformTo(i) {
     fx.ring(gp, role.color, camPos, { radius: 0.5, life: 0.4 });
     fx.ring(gp, 0xffffff, camPos, { radius: 0.32, life: 0.3 });
     fx.halftone(role.color, () => {
+      world.setVoid(false);
       targets.reset();
       world.clearProps();
       world.setRole(role, 0);
@@ -449,6 +455,7 @@ function worldMontage() {
   seq.forEach((role, k) => {
     later(k * 0.32, () => {
       fx.halftone(role.color, () => {
+        world.setVoid(false);
         world.setRole(role, k);
         skin.setRole(role);
       }, { cover: 0.09, hold: 0, reveal: 0.16 });
@@ -480,7 +487,10 @@ function finaleEnd() {
     step(k, t) {
       orbit.forEach((m, i) => {
         const a = t * 0.8 + (i / 5) * Math.PI * 2;
-        m.position.set(Math.cos(a) * 0.9, headY + 0.15 + Math.sin(t * 2 + i) * 0.05, Math.sin(a) * 0.9 - 0.2);
+        // once the credits roll the ring drops to chest height, out of their way
+        const low = ending.t > 0 ? Math.min(1, ending.t / 1.2) : 0;
+        const r = 0.9 + low * 0.25;
+        m.position.set(Math.cos(a) * r, headY + 0.15 - low * 0.6 + Math.sin(t * 2 + i) * 0.05, Math.sin(a) * r - 0.2);
         m.rotation.y = t * 3;
         updateMoon(m, t + i);
       });
@@ -506,9 +516,12 @@ function finaleEnd() {
       state = 'end';
     },
   });
+  // three seconds after the logo and moons settle, fade to the credits
+  later(3.9, () => ending.start({ headY, logo, world }));
 }
 
 function resetAll() {
+  ending.reset();
   anims.forEach((a) => a.orbit?.forEach((m) => scene.remove(m)));
   anims.length = 0;
   timers.length = 0;
@@ -713,6 +726,7 @@ renderer.setAnimationLoop(() => {
   world.update(t, dt);
   roulette.update(dt, t);
   title.update(dt, t);
+  ending.update(dt);
   targets.update(dt, hitPoints, !xr && autoHit, camera.getWorldPosition(tmpA));
   hud.update(dt, t);
   fx.update(dt);

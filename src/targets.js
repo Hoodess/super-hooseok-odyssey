@@ -135,10 +135,8 @@ export class Targets {
     this.hits++;
     const pos = t.obj.position.clone();
     const color = role.color;
-    this.fx.impact(pos, color, this.camPos);
-    this.fx.ring(pos, color, this.camPos, { radius: 0.4, life: 0.35 });
-    this.fx.burst(pos, color, { count: 24, speed: 2, size: 0.05, life: 0.5 });
-    this.fx.glow(pos, color, 0.6, 0.3);
+    this.fx.hitSpark(pos, color, this.camPos);
+    this.fx.burst(pos, color, { count: 18, speed: 1.8, size: 0.04, life: 0.45 });
     this.debris(role.target, pos);
     this.fx.text(role.hitTexts[(this.hits - 1) % role.hitTexts.length], pos.clone().add(new THREE.Vector3(0, 0.2, 0)), hexStr(color), { height: 0.1 });
     this.audio.play('hit');

@@ -172,21 +172,51 @@ export class FX {
     this.items.push({ kind: 'shards', obj: mesh, parts, t: 0, life, gravity, ownGeo: false });
   }
 
-  // Comic hit spark: a colored starburst with a smaller white one inside it,
-  // both popping in and fading.
-  impact(pos, color, facing, { size = 0.42, life = 0.32 } = {}) {
-    const rot = Math.random() * Math.PI;
-    for (const [c, s, order] of [[color, 1, 15], [0xffffff, 0.62, 16]]) {
-      const mat = new THREE.SpriteMaterial({
-        map: impactTexture(), color: c, transparent: true, depthWrite: false, depthTest: false, toneMapped: false,
+  // Layered hit spark, all facing the viewer: a white flash core, two
+  // shockwave rings (white and fast, colored and slower) that thin as they
+  // grow, speed lines shooting outward, and a few spinning four-point twinkles.
+  hitSpark(pos, color, camPos, { scale = 1 } = {}) {
+    const add = (obj, data) => {
+      obj.renderOrder = 15;
+      this.scene.add(obj);
+      this.items.push({ obj, t: 0, ...data });
+    };
+    const sprite = (map, c, opacity = 1) => new THREE.Sprite(new THREE.SpriteMaterial({
+      map, color: c, transparent: true, opacity, depthWrite: false, depthTest: false,
+      blending: THREE.AdditiveBlending, toneMapped: false,
+    }));
+    const p = pos.clone().lerp(camPos, 0.05);
+
+    add(sprite(glowTexture(), 0xffffff, 0.85), { kind: 'spark', life: 0.14, size: 0.18 * scale, pos: p, peak: 0.85 });
+    add(sprite(ringTexture(), 0xffffff), { kind: 'spark', life: 0.22, size: 0.3 * scale, grow: true, pos: p });
+    add(sprite(ringTexture(), color), { kind: 'spark', life: 0.38, size: 0.48 * scale, grow: true, pos: p, delay: 0.03 });
+
+    // speed lines: thin quads on a camera-facing disc, flying outward
+    const disc = new THREE.Group();
+    disc.position.copy(p);
+    disc.lookAt(camPos);
+    const lineMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, depthWrite: false, depthTest: false,
+      blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide,
+    });
+    const rays = [];
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const ray = new THREE.Mesh(lineGeo(), lineMat);
+      ray.rotation.z = a - Math.PI / 2;
+      ray.userData = { a, speed: 0.9 + Math.random() * 0.6, len: 0.06 + Math.random() * 0.05 };
+      disc.add(ray);
+      rays.push(ray);
+    }
+    add(disc, { kind: 'rays', life: 0.26, rays, scale, mat: lineMat });
+
+    for (let k = 0; k < 5; k++) {
+      const tw = sprite(twinkleTexture(), k % 2 ? color : 0xffffff);
+      const off = new THREE.Vector3().randomDirection().multiplyScalar(0.08 + Math.random() * 0.1);
+      add(tw, {
+        kind: 'twinkle', life: 0.45 + Math.random() * 0.2, size: (0.06 + Math.random() * 0.05) * scale,
+        pos: p.clone().add(off), vel: off.multiplyScalar(2), spin: (Math.random() - 0.5) * 10, delay: k * 0.02,
       });
-      mat.rotation = rot + (s < 1 ? 0.3 : 0);
-      const sp = new THREE.Sprite(mat);
-      sp.position.copy(pos);
-      if (facing) sp.position.lerp(facing, 0.04);
-      sp.renderOrder = order;
-      this.scene.add(sp);
-      this.items.push({ kind: 'impact', obj: sp, t: 0, life, size: size * s });
     }
   }
 
@@ -223,8 +253,8 @@ export class FX {
       const k = it.t / it.life;
       if (k >= 1) {
         this.scene.remove(it.obj);
-        if (it.kind !== 'shards') it.obj.geometry?.dispose();
-        it.obj.material.dispose();
+        if (it.kind !== 'shards' && it.kind !== 'rays') it.obj.geometry?.dispose();
+        (it.kind === 'rays' ? it.mat : it.obj.material).dispose();
         this.items.splice(i, 1);
         continue;
       }
@@ -260,10 +290,30 @@ export class FX {
           it.obj.setMatrixAt(j, m4.compose(pt.p, pt.q, sc.setScalar(Math.max(0.001, s))));
         });
         it.obj.instanceMatrix.needsUpdate = true;
-      } else if (it.kind === 'impact') {
-        const pop = k < 0.25 ? 1 - Math.pow(1 - k / 0.25, 3) : 1 + (k - 0.25) * 0.4;
-        it.obj.scale.setScalar(it.size * pop);
-        it.obj.material.opacity = k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5;
+      } else if (it.kind === 'spark') {
+        const kk = Math.max(0, (it.t - (it.delay || 0)) / (it.life - (it.delay || 0)));
+        it.obj.position.copy(it.pos);
+        const e = 1 - Math.pow(1 - kk, 3);
+        it.obj.scale.setScalar(Math.max(0.001, it.grow ? it.size * (0.15 + 0.85 * e) : it.size * (kk < 0.3 ? kk / 0.3 : 1)));
+        it.obj.material.opacity = kk <= 0 ? 0 : (it.grow ? (1 - kk) * (1 - kk) : 1 - kk) * (it.peak ?? 1);
+      } else if (it.kind === 'rays') {
+        const e = 1 - Math.pow(1 - k, 2);
+        for (const r of it.rays) {
+          const u = r.userData;
+          const d = (0.04 + e * 0.22 * u.speed) * it.scale;
+          r.position.set(Math.cos(u.a) * d, Math.sin(u.a) * d, 0);
+          r.scale.set(0.006 * it.scale * (1 - k * 0.6), u.len * it.scale * (1 - k), 1);
+        }
+        it.mat.opacity = 1 - k;
+      } else if (it.kind === 'twinkle') {
+        const kk = Math.max(0, (it.t - it.delay) / (it.life - it.delay));
+        it.pos.addScaledVector(it.vel, dt);
+        it.vel.multiplyScalar(1 - dt * 6);
+        it.obj.position.copy(it.pos);
+        it.obj.material.rotation += it.spin * dt;
+        const pop = kk < 0.25 ? kk / 0.25 : 1 - (kk - 0.25) / 0.75;
+        it.obj.scale.setScalar(Math.max(0.001, it.size * pop));
+        it.obj.material.opacity = kk <= 0 ? 0 : 1;
       } else if (it.kind === 'converge') {
         const a = it.obj.geometry.attributes.position;
         const e = k * k * k;
@@ -282,28 +332,55 @@ export class FX {
   }
 }
 
-let impactTex = null;
-function impactTexture() {
-  if (impactTex) return impactTex;
-  impactTex = new THREE.CanvasTexture(canvas(256, 256, (g, w, h) => {
-    const spikes = 9;
-    const path = (r1, r2) => {
-      g.beginPath();
-      for (let i = 0; i <= spikes * 2; i++) {
-        const r = (i % 2 ? r2 : r1) * (0.85 + ((i * 37) % 7) / 40);
-        const a = (i / (spikes * 2)) * Math.PI * 2;
-        const fn = i ? 'lineTo' : 'moveTo';
-        g[fn](w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r);
-      }
-      g.closePath();
-    };
-    path(124, 62);
-    g.fillStyle = '#ffffff';
-    g.fill();
-    path(92, 44);
-    g.fillStyle = '#fffbe8';
-    g.fill();
+let ringTex = null;
+function ringTexture() {
+  if (ringTex) return ringTex;
+  ringTex = new THREE.CanvasTexture(canvas(256, 256, (g, w, h) => {
+    const c = w / 2;
+    const grad = g.createRadialGradient(c, c, c * 0.62, c, c, c * 0.98);
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.55, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.75, 'rgba(255,255,255,0.6)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
   }));
-  impactTex.colorSpace = THREE.SRGBColorSpace;
-  return impactTex;
+  return ringTex;
+}
+
+// four-point twinkle with a soft core
+let twinkleTex = null;
+function twinkleTexture() {
+  if (twinkleTex) return twinkleTex;
+  twinkleTex = new THREE.CanvasTexture(canvas(128, 128, (g, w, h) => {
+    const c = w / 2;
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const r = i % 2 ? 9 : 62;
+      const a = (i / 8) * Math.PI * 2;
+      g[i ? 'lineTo' : 'moveTo'](c + Math.cos(a) * r, c + Math.sin(a) * r);
+    }
+    g.closePath();
+    g.fill();
+    const glow = g.createRadialGradient(c, c, 0, c, c, 30);
+    glow.addColorStop(0, 'rgba(255,255,255,1)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = glow;
+    g.fillRect(0, 0, w, h);
+  }));
+  return twinkleTex;
+}
+
+// a unit speed line, tapered at the inner end
+let rayGeo = null;
+function lineGeo() {
+  if (rayGeo) return rayGeo;
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0);
+  sh.lineTo(0.5, 0.15);
+  sh.lineTo(0, 1);
+  sh.lineTo(-0.5, 0.15);
+  sh.closePath();
+  return (rayGeo = new THREE.ShapeGeometry(sh));
 }

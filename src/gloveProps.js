@@ -6,6 +6,10 @@ import { glowTexture } from './textures.js';
 // Bone space: +Y out of the back of the hand, -Z toward the fingertips, X across
 // the palm (mirrored between hands, so props use `mx` to stay on the same side).
 
+// How far the glove shader pushes the hand surface out (meters); props that
+// sit on the glove move out by the same amount.
+export const INFLATE = 0.0035;
+
 let gradient = null;
 export function toonGradient() {
   if (!gradient) {
@@ -109,12 +113,12 @@ const CUFF = {
 function cuff(roleId) {
   const c = CUFF[roleId] || CUFF.hub;
   const g = new THREE.Group();
-  const puff = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.013, 12, 32), toon(c.color, { spec: 0.25 }));
+  const puff = new THREE.Mesh(new THREE.TorusGeometry(0.036 + INFLATE, 0.014, 12, 32), toon(c.color, { spec: 0.25 }));
   puff.scale.set(1.05, 0.72, 1.25);
   g.add(puff);
   if (c.trim) {
     const trim = new THREE.Mesh(
-      new THREE.TorusGeometry(0.037, 0.0035, 8, 32),
+      new THREE.TorusGeometry(0.037 + INFLATE, 0.0035, 8, 32),
       c.trimGlow ? glow(c.trim) : toon(c.trim),
     );
     trim.scale.set(1.08, 0.78, 1);
@@ -126,7 +130,7 @@ function cuff(roleId) {
 }
 
 function ring(color, glowing = false) {
-  const m = new THREE.Mesh(new THREE.TorusGeometry(0.0105, 0.0028, 8, 20), glowing ? glow(color) : toon(color, { spec: 0.8 }));
+  const m = new THREE.Mesh(new THREE.TorusGeometry(0.0105 + INFLATE, 0.0028, 8, 20), glowing ? glow(color) : toon(color, { spec: 0.8 }));
   m.position.z = -0.016;
   if (glowing) m.add(halo(color, 0.045, 0.45));
   return m;
@@ -134,7 +138,7 @@ function ring(color, glowing = false) {
 
 function stickyNote(color, x, z, rot) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.0012, 0.022), toon(color));
-  m.position.set(x, 0.02, z);
+  m.position.set(x, 0.02 + INFLATE, z);
   m.rotation.y = rot;
   m.rotation.x = 0.08;
   return m;
@@ -217,11 +221,11 @@ function compassWatch() {
 
 function strap() {
   const g = new THREE.Group();
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.004, 6, 32), toon(0x5a3018));
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.044 + INFLATE, 0.004, 6, 32), toon(0x5a3018));
   band.scale.set(1, 0.48, 1);
   band.rotation.x = 0.15;
   const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.003, 0.011), toon(0xe8b04a));
-  buckle.position.y = 0.021;
+  buckle.position.y = 0.021 + INFLATE;
   g.add(band, buckle);
   return g;
 }
@@ -250,7 +254,7 @@ export function buildProps(roleId, side) {
     case 'arch': {
       if (side === 'right') {
         const s = setSquare();
-        s.position.set(-0.018 * mx, 0.021, -0.022);
+        s.position.set(-0.018 * mx, 0.021 + INFLATE, -0.022);
         add('middle-finger-metacarpal', s);
       } else {
         const t = tapeMeasure();
@@ -287,7 +291,7 @@ export function buildProps(roleId, side) {
           toon(0xc58bff, { emissive: 0x3a0f6a }),
         );
         gem.scale.y = 1.4;
-        gem.position.set(0, 0.024, -0.032);
+        gem.position.set(0, 0.024 + INFLATE, -0.032);
         add('middle-finger-metacarpal', gem);
       }
       break;

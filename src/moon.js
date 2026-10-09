@@ -90,7 +90,15 @@ export class MoonHUD {
   }
 
   place(headY) {
-    this.group.position.set(0, headY + 0.75, -2.2);
+    this.baseY = headY + 0.75;
+    this.group.position.set(0, this.baseY, -2.2);
+  }
+
+  // Entrance after GAME START: the row drops in with a bounce, then each slot
+  // pops in with a spin, left to right.
+  intro() {
+    this.introT = 0;
+    this.slots.forEach((m) => m.scale.setScalar(0.001));
   }
 
   slotWorldPos(i) {
@@ -108,8 +116,22 @@ export class MoonHUD {
   }
 
   update(dt, t) {
+    let intro = null;
+    if (this.introT !== undefined && this.introT < 2) {
+      this.introT += dt;
+      const k = Math.min(1, this.introT / 0.6);
+      this.group.position.y = this.baseY + (1 - easeOutBounce(k)) * 0.6;
+      intro = this.introT;
+    }
     this.slots.forEach((m, i) => {
       m.rotation.y = Math.sin(t * 1.5 + i) * 0.4;
+      if (intro !== null) {
+        const k = Math.max(0, Math.min(1, (intro - 0.35 - i * 0.12) / 0.35));
+        const x = k - 1;
+        m.scale.setScalar(Math.max(0.001, 0.45 * (1 + 2.7 * x * x * x + 1.7 * x * x)));
+        m.rotation.y += (1 - k) * Math.PI * 2;
+        return;
+      }
       updateMoon(m, t + i);
       if (m.userData.pop > 0) {
         m.userData.pop = Math.max(0, m.userData.pop - dt * 2);
@@ -126,4 +148,12 @@ function setEmpty(m, empty) {
   u.glow.visible = !empty;
   u.sparkles.visible = !empty;
   u.star.visible = !empty;
+}
+
+function easeOutBounce(x) {
+  const n = 7.5625, d = 2.75;
+  if (x < 1 / d) return n * x * x;
+  if (x < 2 / d) return n * (x -= 1.5 / d) * x + 0.75;
+  if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + 0.9375;
+  return n * (x -= 2.625 / d) * x + 0.984375;
 }
