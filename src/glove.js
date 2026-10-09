@@ -10,7 +10,7 @@ export const BACK_OF_HAND = new THREE.Vector3(0, 1, 0);
 // Each glove also gets an inverted-hull outline and the role's cuff and props.
 export class GloveSkin {
   constructor() {
-    this.material = toon(0xe0201c, { emissive: 0x000000 });
+    this.material = toon(0xe0201c, { emissive: 0x000000, spec: 0.3 });
     this.outlineWidth = { value: 0.003 };
     this.outline = new THREE.MeshBasicMaterial({ color: 0x2a0606, side: THREE.BackSide });
     this.outline.onBeforeCompile = (shader) => {
@@ -30,7 +30,7 @@ export class GloveSkin {
     const m = this.material;
     if (role.glove) {
       m.map = assetTexture(role.glove, glovePlaceholder(role));
-      m.color.setHex(0xffffff);
+      m.color.setHex(0xe4e4e4); // a touch under white so pale textures keep detail
     } else {
       m.map = null;
       m.color.setHex(role.color);
@@ -97,43 +97,7 @@ function attached(object) {
   return o.isScene;
 }
 
-// Cappy-style eyes plus the glowing button that starts the roulette.
-export function makeCappyEyes() {
-  const g = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-  const iris = new THREE.MeshBasicMaterial({ color: 0xc81414 });
-  const pupil = new THREE.MeshBasicMaterial({ color: 0x111111 });
-  const lids = [];
-  for (const side of [-1, 1]) {
-    const eye = new THREE.Group();
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.011, 20, 14), white);
-    ball.scale.set(0.8, 0.5, 1.15);
-    eye.add(ball);
-    const ir = new THREE.Mesh(new THREE.CircleGeometry(0.0055, 20), iris);
-    ir.position.set(0, 0.0056, -0.002);
-    ir.rotation.x = -Math.PI / 2;
-    eye.add(ir);
-    const pu = new THREE.Mesh(new THREE.CircleGeometry(0.003, 16), pupil);
-    pu.position.set(0, 0.0058, -0.0022);
-    pu.rotation.x = -Math.PI / 2;
-    eye.add(pu);
-    eye.position.set(side * 0.0115, 0, 0.006);
-    eye.rotation.z = side * 0.25;
-    lids.push(eye);
-    g.add(eye);
-  }
-  g.userData.blink = 0;
-  g.userData.lids = lids;
-  return g;
-}
-
-export function updateEyes(eyes, t) {
-  // blink every ~3.5s
-  const phase = t % 3.5;
-  const s = phase < 0.12 ? Math.abs(Math.cos((phase / 0.12) * Math.PI)) * 0.9 + 0.1 : 1;
-  for (const e of eyes.userData.lids) e.scale.z = s;
-}
-
+// The glowing button on the back of the left glove that starts the roulette.
 export function makeHandButton(color = 0xff3b30) {
   const g = new THREE.Group();
   const mat = new THREE.MeshBasicMaterial({ color, toneMapped: false });

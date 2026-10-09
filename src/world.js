@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { assetTexture, bgPlaceholder, glowTexture } from './textures.js';
 import { Island } from './island.js';
+import { LOOK } from './gloveProps.js';
 
 // The world around the player: gradient sky dome, a 200-degree panorama band
 // in front (GPT images are not seamless 360s, so the edges fade into the sky),
@@ -8,6 +9,17 @@ import { Island } from './island.js';
 
 // A narrower arc packs more of the 1536px image into each degree, so the
 // panorama reads sharper and farther away. ?arc=<deg>&r=<m> override for testing.
+// Per-role lighting sampled from each background (sky/ground averages and its
+// brightest light), so the toon objects sit inside the painting.
+const LIGHTS = {
+  hub: { sky: 0xc9b6d9, ground: 0x9c8d86, key: 0xfff0ce, rim: 0xffe9a8, shadow: 0xa89ad6 },
+  grad: { sky: 0xb0607a, ground: 0x722c1f, key: 0xffc06a, rim: 0xffb04f, shadow: 0xb07aa0 },
+  arch: { sky: 0x9cc4ff, ground: 0x3173da, key: 0xf0f6ff, rim: 0xabd7ff, shadow: 0x8ea4e8 },
+  ta: { sky: 0x6ab8c8, ground: 0x294f53, key: 0xd8f6f4, rim: 0x6affc0, shadow: 0x7ab0bc },
+  fortune: { sky: 0xb07ac0, ground: 0x6e3a4a, key: 0xffd6a8, rim: 0xffc27a, shadow: 0x9a7ac8 },
+  travel: { sky: 0xfff0c8, ground: 0xa49071, key: 0xfff0b0, rim: 0xffe08a, shadow: 0xd0a890 },
+};
+
 const query = new URLSearchParams(location.search);
 const PANO_RADIUS = Number(query.get('r')) || 40;
 const PANO_ARC = THREE.MathUtils.degToRad(Number(query.get('arc')) || 160);
@@ -112,12 +124,12 @@ export class World {
     this.group.add(this.dust);
 
     // lights
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 1.4);
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 1.25);
     this.group.add(this.hemi);
-    this.key = new THREE.DirectionalLight(0xffffff, 2.2);
+    this.key = new THREE.DirectionalLight(0xffffff, 2.0);
     this.key.position.set(2, 5, 3);
     this.group.add(this.key);
-    this.rim = new THREE.PointLight(0xffffff, 6, 8);
+    this.rim = new THREE.PointLight(0xffffff, 5.4, 8);
     this.rim.position.set(0, 2.5, -2);
     this.group.add(this.rim);
 
@@ -136,8 +148,13 @@ export class World {
     this.skyUniforms.accent.value.copy(c);
     this.ringMat.color.copy(c).multiplyScalar(2.0);
     this.dustMat.color.copy(c).lerp(new THREE.Color(0xffffff), 0.5);
-    this.hemi.color.copy(c).lerp(new THREE.Color(0xffffff), 0.6);
-    this.rim.color.copy(c);
+    const l = LIGHTS[role.id] || LIGHTS.hub;
+    this.hemi.color.setHex(l.sky);
+    this.hemi.groundColor.setHex(l.ground);
+    this.key.color.setHex(l.key);
+    this.rim.color.setHex(l.rim);
+    LOOK.rimColor.value.setHex(l.rim);
+    LOOK.shadowTint.value.setHex(l.shadow);
     this.island.setRole(role);
   }
 

@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { HITS_PER_ROLE, TARGETS_PER_ROLE } from './roles.js';
-import { toon } from './gloveProps.js';
+import { toon, inkOutline } from './gloveProps.js';
+import { BuildingSlots, makeBuilding, makeFoundation } from './buildings.js';
 import {
-  assetTexture, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
+  blobShadow, assetTexture, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
 } from './textures.js';
 
 // Spawns the role's targets, flies them at the player, resolves hits and plays
@@ -16,6 +17,7 @@ const SPAWN_INTERVAL = 1.05;
 
 const hexStr = (n) => '#' + n.toString(16).padStart(6, '0');
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
+const easeOutBack = (k) => { const x = k - 1; return 1 + 2.7 * x * x * x + 1.7 * x * x; };
 
 export class Targets {
   constructor(scene, world, fx, audio) {
@@ -31,6 +33,8 @@ export class Targets {
     this.onComplete = null;
     this.onHit = null;
     this.tmp = new THREE.Vector3();
+    this.slots = new BuildingSlots();
+    this.built = 0;
   }
 
   start(role, headY, onComplete) {
@@ -42,11 +46,15 @@ export class Targets {
     this.spawnT = 0.4;
     this.onComplete = onComplete;
     this.travelVariant = 0;
+    this.slots.reset();
   }
 
   reset() {
     this.running = false;
-    for (const t of this.active) this.scene.remove(t.obj);
+    for (const t of this.active) {
+      this.scene.remove(t.obj);
+      this.scene.remove(t.shadow);
+    }
     this.active = [];
     for (const h of [...this.hanging.children]) this.hanging.remove(h);
   }
@@ -60,24 +68,24 @@ export class Targets {
     obj.position.copy(start);
     this.scene.add(obj);
     const vel = end.clone().sub(start).normalize().multiplyScalar(SPEED);
-    this.active.push({ obj, vel, state: 'fly', index: this.spawned, t: 0, spin: (Math.random() - 0.5) * 2 });
+    const shadow = blobShadow(0.36, 0);
+    this.scene.add(shadow);
+    this.active.push({ obj, vel, shadow, state: 'fly', index: this.spawned, t: 0, spin: (Math.random() - 0.5) * 2 });
     this.spawned++;
   }
 
   build(type, i) {
     switch (type) {
       case 'paper': {
-        const front = toon(0xffffff, { map: assetTexture('paper_cover.png', paperPlaceholder) });
-        const side = toon(0xe8e1cf);
+        const front = toon(0xffffff, { map: assetTexture('paper_cover.png', paperPlaceholder), spec: 0 });
+        const side = toon(0xe8e1cf, { spec: 0 });
         const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.02), [side, side, side, side, front, side]);
-        return m;
+        return inkOutline(m, 1.04);
       }
       case 'block': {
         const g = new THREE.Group();
         const geo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
-        const fill = new THREE.MeshStandardMaterial({
-          color: 0x1f7bff, transparent: true, opacity: 0.12, emissive: 0x0a2a66, depthWrite: false,
-        });
+        const fill = toon(0x1f7bff, { transparent: true, opacity: 0.16, depthWrite: false });
         g.add(new THREE.Mesh(geo, fill));
         g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x9cc8ff, toneMapped: false })));
         g.userData.fill = fill;
@@ -93,24 +101,24 @@ export class Targets {
         return new THREE.Mesh(geos[i % geos.length], new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95, flatShading: i % 4 === 3 }));
       }
       case 'card': {
+        // a thick card with gold edges: back faces the player while flying (+z),
+        // the life scene is on -z and shows once it flips
         const g = new THREE.Group();
-        const geo = new THREE.PlaneGeometry(0.26, 0.4);
-        const back = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: assetTexture('tarot_back.png', tarotBackPlaceholder), roughness: 0.5 }));
         const k = (i % 5) + 1;
-        const front = new THREE.Mesh(
-          geo,
-          new THREE.MeshStandardMaterial({ map: assetTexture(`tarot_${k}.png`, tarotFrontPlaceholder(i)), roughness: 0.5, emissive: 0x221133 }),
-        );
-        front.rotation.y = Math.PI;
-        g.add(back, front);
+        const gold = toon(0xf2c14e, { spec: 0.8 });
+        const back = toon(0xffffff, { map: assetTexture('tarot_back.png', tarotBackPlaceholder) });
+        const front = toon(0xffffff, { map: assetTexture(`tarot_${k}.png`, tarotFrontPlaceholder(i)), emissive: 0x110818 });
+        const card = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.4, 0.008), [gold, gold, gold, gold, back, front]);
+        g.add(inkOutline(card, 1.04));
         return g;
       }
       case 'polaroid': {
         const g = new THREE.Group();
-        const frame = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.36), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, side: THREE.DoubleSide }));
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.36, 0.012), toon(0xece2cc));
+        inkOutline(frame, 1.04);
         const photoMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a });
         const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.26), photoMat);
-        photo.position.set(0, 0.025, 0.002);
+        photo.position.set(0, 0.025, 0.007);
         g.add(frame, photo);
         g.userData.photoMat = photoMat;
         return g;
@@ -164,12 +172,12 @@ export class Targets {
         fill.opacity = 1;
         fill.transparent = false;
         fill.depthWrite = true;
-        fill.color.setHex(0xe8f1ff);
-        fill.emissive.setHex(0x1f7bff);
-        fill.emissiveIntensity = 0.6;
-        this.raiseBuilding();
+        fill.color.setHex([0x7fb4ff, 0xffd0dc, 0xffe2b8, 0xd8f5e0][this.hits % 4]);
+        fill.needsUpdate = true;
+        // the block flies off to the spot where its building rises
+        const site = this.raiseBuilding();
         const from = t.obj.position.clone();
-        const to = new THREE.Vector3((Math.random() - 0.5) * 8, this.headY + 2.5, -10);
+        const to = site ? site.clone().add(new THREE.Vector3(0, 1.2, 0)) : new THREE.Vector3((Math.random() - 0.5) * 8, this.headY + 2.5, -10);
         t.post = (dt) => {
           const k = Math.min(1, t.t / 0.9);
           t.obj.position.lerpVectors(from, to, easeOut(k));
@@ -259,28 +267,35 @@ export class Targets {
   }
 
   raiseBuilding() {
-    const h = 2.5 + Math.random() * 6;
-    const w = 1 + Math.random() * 1.6;
-    const geo = new THREE.BoxGeometry(w, h, w);
-    geo.translate(0, h / 2, 0);
-    const b = new THREE.Group();
-    b.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdfe9ff, emissive: 0x0d3a8a, roughness: 0.4 })));
-    b.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x8fc1ff, toneMapped: false })));
-    const side = Math.random() < 0.5 ? -1 : 1;
-    b.position.set(side * (2.5 + Math.random() * 8), -1, -9 - Math.random() * 8);
-    b.scale.y = 0.001;
-    b.userData.grow = 0;
-    this.world.props.add(b);
-    this.fx.burst(b.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 0x9cc8ff, { count: 50, speed: 2.5, size: 0.15 });
+    const at = this.slots.take();
+    if (!at) return null;
+    const root = new THREE.Group();
+    root.position.set(at.x, -0.4, at.z);
+    root.rotation.y = Math.atan2(-at.x, -at.z); // door faces the player
+    const base = makeFoundation();
+    const b = makeBuilding(this.built++);
+    root.add(base, b);
+    base.scale.setScalar(0.001);
+    b.scale.set(1, 0.001, 1);
+    root.userData = { grow: 0, base, b };
+    this.world.props.add(root);
+    this.fx.shards(root.position.clone().add(new THREE.Vector3(0, 0.3, 0)), DEBRIS().cube, [0x9cc8ff, 0xffffff, 0x1f7bff], {
+      count: 24, speed: 4, size: 4, life: 1.2, gravity: -4,
+    });
+    return root.position;
   }
 
   update(dt, hitPoints, autoHit, camPos) {
     this.camPos = camPos;
-    for (const b of this.world.props.children) {
-      if (b.userData.grow !== undefined && b.userData.grow < 1) {
-        b.userData.grow = Math.min(1, b.userData.grow + dt * 1.3);
-        b.scale.y = Math.max(0.001, easeOut(b.userData.grow));
+    for (const p of this.world.props.children) {
+      const u = p.userData;
+      if (u.grow === undefined) continue;
+      if (u.grow < 1) {
+        u.grow = Math.min(1, u.grow + dt * 0.9);
+        u.base.scale.setScalar(Math.max(0.001, easeOutBack(Math.min(1, u.grow * 2.5))));
+        u.b.scale.y = Math.max(0.001, easeOutBack(Math.max(0, Math.min(1, u.grow * 1.4 - 0.35))));
       }
+      p.position.y = -0.4 + Math.sin(performance.now() * 0.0012 + p.position.x) * 0.06;
     }
     if (this.running) {
       this.spawnT -= dt;
@@ -304,6 +319,7 @@ export class Targets {
       } else if (t.state === 'hit') {
         const r = t.post(dt);
         if (r === 'hang') {
+          this.scene.remove(t.shadow);
           this.active.splice(i, 1);
           this.hanging.attach(t.obj);
           continue;
@@ -315,7 +331,14 @@ export class Targets {
         t.obj.scale.multiplyScalar(1 - dt * 6);
         if (t.obj.scale.x < 0.05) t.state = 'gone';
       }
+      // blob shadow on the island floor while the target is over it
+      const p = t.obj.position;
+      const over = Math.hypot(p.x, p.z) < 1.3;
+      t.shadow.position.set(p.x, 0.006, p.z);
+      t.shadow.material.opacity = over && t.state !== 'gone' ? 0.32 * Math.max(0, 1 - p.y / 3) * t.obj.scale.x : 0;
+      t.shadow.scale.setScalar(0.18 + p.y * 0.08);
       if (t.state === 'gone') {
+        this.scene.remove(t.shadow);
         this.scene.remove(t.obj);
         this.active.splice(i, 1);
       }

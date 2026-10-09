@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { textCanvas, glowTexture } from './textures.js';
-import { toon } from './gloveProps.js';
+import { toon, halo } from './gloveProps.js';
 
 // A chunky toy roulette: five beveled toon wedges with an icon and name each,
 // a gold rim of chasing bulbs, gold pegs between wedges and a red flapper that
@@ -11,7 +11,7 @@ const R = 0.16;
 const DEPTH = 0.012;
 // wedge labels must fit a 72-degree slice
 const SHORT = { ta: 'TA' };
-const ICONS = { grad: '📄', arch: '📐', ta: '💠', fortune: '🔮', travel: '📷' };
+const ICONS = { grad: '📄', arch: '📐', ta: '💻', fortune: '🔮', travel: '📷' };
 const OVERSHOOT = 0.14;
 const SETTLE = 0.45;
 
@@ -73,7 +73,7 @@ export class Roulette {
       this.wedges.push(w);
     });
 
-    const gold = toon(0xffc93c, { emissive: 0x4a2a00 });
+    const gold = toon(0xffc93c, { emissive: 0x4a2a00, spec: 0.9 });
     // pegs sit on the wedge borders and are what the flapper catches on
     this.pegs = roles.map((_, i) => {
       const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 10), gold);
@@ -88,13 +88,17 @@ export class Roulette {
     rim.position.z = 0.008;
     this.group.add(rim);
     this.bulbMats = [];
+    this.bulbHalos = [];
     for (let i = 0; i < 24; i++) {
       const mat = new THREE.MeshBasicMaterial({ color: 0xfff3c4, toneMapped: false });
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 10, 8), mat);
       const a = (i / 24) * Math.PI * 2;
       bulb.position.set(Math.cos(a) * (R + 0.012), Math.sin(a) * (R + 0.012), 0.02);
+      const h = halo(0xffd96b, 0.05, 0.6);
+      bulb.add(h);
       this.group.add(bulb);
       this.bulbMats.push(mat);
+      this.bulbHalos.push(h);
     }
 
     this.hub = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.24, R * 0.26, 0.02, 32), toon(0xffffff));
@@ -110,7 +114,7 @@ export class Roulette {
     // flapper: hinged at the top, tip pointing down into the wheel
     this.flapper = new THREE.Group();
     this.flapper.position.set(0, R + 0.05, 0.03);
-    const red = toon(0xe8302a, { emissive: 0x220000 });
+    const red = toon(0xe8302a, { emissive: 0x220000, spec: 0.8 });
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.05, 16), red);
     tip.rotation.z = Math.PI;
     tip.position.y = -0.03;
@@ -206,6 +210,7 @@ export class Roulette {
     this.bulbMats.forEach((m, i) => {
       const on = spinning ? (Math.floor(t * 14) + i) % 3 === 0 : (Math.floor(t * 4) + i) % 2 === 0;
       m.color.setHex(on ? 0xfff3c4 : 0x7a5a20);
+      this.bulbHalos[i].visible = on;
     });
     this.star.rotation.z = -this.wheel.rotation.z * 0.5;
 

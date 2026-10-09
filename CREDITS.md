@@ -13,6 +13,7 @@
 |---|---|---|
 | 손 모델 (assets/models/hands) | [@webxr-input-profiles/assets](https://github.com/immersive-web/webxr-input-profiles) generic-hand | MIT |
 | three.js | [three.js](https://github.com/mrdoob/three.js) | MIT |
+| Jua 폰트 (게임 내 글씨) | [Jua](https://fonts.google.com/specimen/Jua), [@fontsource/jua](https://fontsource.org/fonts/jua) | OFL-1.1 |
 
 ## 음악
 - Jump Up, Super Star! (Super Mario Odyssey OST) — 원작 OST, AI 생성물 아님

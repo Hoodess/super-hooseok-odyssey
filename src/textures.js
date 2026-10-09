@@ -323,3 +323,29 @@ export function glowTexture() {
   );
   return glowTex;
 }
+
+// Soft dark disc used for blob shadows under props, targets and hands.
+let shadowTex = null;
+export function shadowTexture() {
+  if (shadowTex) return shadowTex;
+  shadowTex = new THREE.CanvasTexture(canvas(64, 64, (g, w, h) => {
+    const grad = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(0.55, 'rgba(0,0,0,0.65)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, w, h);
+  }));
+  return shadowTex;
+}
+
+export function blobShadow(size, opacity = 0.35) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ map: shadowTexture(), color: 0x1a1030, transparent: true, opacity, depthWrite: false }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.scale.setScalar(size);
+  m.renderOrder = 1;
+  return m;
+}

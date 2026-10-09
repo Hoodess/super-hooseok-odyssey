@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { toon } from './gloveProps.js';
+import { toon, halo, inkOutline } from './gloveProps.js';
+import { blobShadow, canvas } from './textures.js';
 
 // The floating island the player stands on: a rounded toon top whose surface
 // changes per role (grass, library floor, blueprint tile...), a tapered rocky
@@ -22,9 +23,9 @@ export class Island {
     this.group = new THREE.Group();
     parent.add(this.group);
 
-    this.topMat = toon(SURFACE.hub.top);
+    this.topMat = toon(SURFACE.hub.top, { spec: 0, map: topPattern() });
     this.lipMat = toon(SURFACE.hub.lip);
-    this.dirtMat = toon(SURFACE.hub.dirt);
+    this.dirtMat = toon(SURFACE.hub.dirt, { spec: 0 });
     const outline = new THREE.MeshBasicMaterial({ color: 0x1a1030, side: THREE.BackSide });
 
     const top = new THREE.Mesh(new THREE.CylinderGeometry(TOP_R, TOP_R, 0.08, 64), this.topMat);
@@ -59,7 +60,11 @@ export class Island {
     for (const p of [...this.props.children]) this.props.remove(p);
     const items = PROPS[role.id] || PROPS.hub;
     items.forEach(([angleDeg, build], i) => {
-      const obj = build(i);
+      const obj = inkOutline(build(i));
+      obj.scale.setScalar(1.4);
+      const shadow = blobShadow(0.34, 0.3);
+      shadow.position.y = 0.004;
+      obj.add(shadow);
       const a = THREE.MathUtils.degToRad(angleDeg);
       // 0 deg is straight ahead (-Z); props live at 70..290 deg
       obj.position.set(Math.sin(a) * TOP_R * 0.86, 0, -Math.cos(a) * TOP_R * 0.86);
@@ -67,6 +72,34 @@ export class Island {
       this.props.add(obj);
     });
   }
+}
+
+// Soft concentric bands with a ring of dots; multiplies the role's top color.
+function topPattern() {
+  const tex = new THREE.CanvasTexture(canvas(512, 512, (g, w, h) => {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, w, h);
+    const c = w / 2;
+    for (let r = 250; r > 20; r -= 46) {
+      g.beginPath();
+      g.arc(c, c, r, 0, Math.PI * 2);
+      g.lineWidth = 14;
+      g.strokeStyle = 'rgba(0,0,0,0.07)';
+      g.stroke();
+    }
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      g.beginPath();
+      g.arc(c + Math.cos(a) * 204, c + Math.sin(a) * 204, 7, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(255,255,255,0.0)';
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.1)';
+      g.lineWidth = 4;
+      g.stroke();
+    }
+  }));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function wobblyCone(r0, r1, h, seed) {
@@ -103,7 +136,7 @@ function mushroom() {
   const g = new THREE.Group();
   const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.12, 12), toon(0xfff1d6));
   stalk.position.y = 0.06;
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xe8302a));
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), toon(0xe8302a, { spec: 0.8 }));
   cap.position.y = 0.11;
   g.add(stalk, cap);
   for (let k = 0; k < 4; k++) {
@@ -187,6 +220,7 @@ function nodePost(i) {
   post.position.y = 0.175;
   const orb = new THREE.Mesh(new THREE.SphereGeometry(0.035, 14, 10), glowMat([0x3dff8a, 0x5fd3ff, 0xff5fa2][i % 3]));
   orb.position.y = 0.38;
+  orb.add(halo(orb.material.color.getHex(), 0.22, 0.6));
   g.add(post, orb);
   return g;
 }
@@ -206,6 +240,7 @@ function candle(i) {
   const flame = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), glowMat(0xffc85a));
   flame.scale.y = 1.8;
   flame.position.y = h + 0.025;
+  flame.add(halo(0xffb040, 0.16, 0.7));
   g.add(wax, flame);
   return g;
 }

@@ -21,7 +21,7 @@ export function makeMoon(color) {
     depth: 0.02, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.018, bevelSegments: 6, curveSegments: 40,
   });
   geo.center();
-  const mat = toon(color, { emissive: color, emissiveIntensity: 0.35 });
+  const mat = toon(color, { emissive: color, emissiveIntensity: 0.35, spec: 0.8 });
   const m = new THREE.Mesh(geo, mat);
   g.add(m);
   const hull = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x1a1030, side: THREE.BackSide }));

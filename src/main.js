@@ -14,11 +14,12 @@ import { ROLES, HUB } from './roles.js';
 import { World } from './world.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
-import { GloveSkin, makeCappyEyes, updateEyes, makeHandButton, BACK_OF_HAND } from './glove.js';
+import { GloveSkin, makeHandButton, BACK_OF_HAND } from './glove.js';
+import { makeCappyEyes, updateEyes, setExpression, setBaseExpression } from './eyes.js';
 import { Roulette } from './roulette.js';
 import { Targets } from './targets.js';
 import { makeMoon, MoonHUD, updateMoon } from './moon.js';
-import { assetTexture, canvas } from './textures.js';
+import { assetTexture, canvas, blobShadow } from './textures.js';
 
 // Canvas text does not trigger @font-face loading, and the Korean face is split
 // by unicode range, so ask for every glyph the game draws up front.
@@ -37,8 +38,10 @@ const DT_MAX = params.has('test') ? 0.4 : 1 / 20;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: params.has('capture') });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+// No filmic tone mapping: the toon look wants flat, saturated color, and the
+// desktop's post chain tone-maps everything (ignoring material.toneMapped), so
+// ACES there made the desktop and the headset disagree.
+renderer.toneMapping = THREE.NoToneMapping;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 renderer.xr.setFoveation(0.5);
@@ -126,6 +129,7 @@ const hands = [0, 1].map((i) => {
 });
 
 const allEyes = [];
+const eyesAll = (fn) => allEyes.forEach(fn);
 const allButtons = [];
 let xrButton = null;
 
@@ -272,7 +276,8 @@ function placeRoulette() {
   const p = renderer.xr.isPresenting ? jointPos(left, 'middle-finger-metacarpal', new THREE.Vector3()) : null;
   const camPos = camera.getWorldPosition(new THREE.Vector3());
   if (p) {
-    roulette.group.position.copy(p).add(new THREE.Vector3(0, 0.2, 0));
+    // high enough that the wheel (r ~0.2m with rim and flapper) clears the hand
+    roulette.group.position.copy(p).add(new THREE.Vector3(0, 0.3, 0));
   } else {
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
     roulette.group.position.copy(camPos).addScaledVector(fwd, 0.62).add(new THREE.Vector3(-0.05, 0.02, 0));
@@ -288,6 +293,7 @@ function pressButton() {
   skin.pulse();
   if (next >= ROLES.length) return startFinale();
   state = 'spin';
+  eyesAll((e) => { setExpression(e, 'wow', 0.35); setBaseExpression(e, 'dizzy'); });
   const i = next;
   roulette.show();
   placeRoulette();
@@ -296,6 +302,7 @@ function pressButton() {
     onTick: () => audio.play('tick'),
     onDone: () => {
       audio.play('ding');
+      eyesAll((e) => { setBaseExpression(e, 'idle'); setExpression(e, 'wow', 0.7); });
       roulette.setHubLabel(ROLES[i].name, hexStr(ROLES[i].color));
       fx.burst(roulette.group.position, ROLES[i].color, { count: 50, speed: 1.2, size: 0.03 });
       later(0.7, () => transformTo(i));
@@ -312,21 +319,31 @@ function transformTo(i) {
   audio.play('transform');
   const gp = gloveAnchor();
   const camPos = camera.getWorldPosition(new THREE.Vector3());
-  // Cappy's eyes flash, then the role color bursts out of the glove and
-  // swallows the view; the world swaps while it covers everything.
+  // Capture: Cappy squints and sparkles get pulled into the glove, it pops with
+  // a ring, and dots in the role color sweep over the view; the world swaps
+  // under the dots and they open again from the center.
   skin.pulse();
-  allEyes.forEach((e) => fx.glow(e.getWorldPosition(new THREE.Vector3()), 0xffffff, 0.35, 0.35));
-  fx.impact(gp, role.color, camPos, { size: 0.5, life: 0.4 });
-  fx.shards(gp, starShard(), [role.color, 0xffffff, 0xffe45c], { count: 20, speed: 2.4, life: 1.1, glowing: true, gravity: -0.6, up: 0.4 });
-  later(0.12, () => fx.wipe(gp, role.color, camPos, () => {
-    targets.reset();
-    world.clearProps();
-    world.setRole(role, 0);
-    skin.setRole(role);
-    fx.burst(gp, role.color, { count: 60, speed: 2, size: 0.05 });
-  }));
-  later(0.6, () => showTitle(role));
-  later(1.6, () => {
+  eyesAll((e) => setExpression(e, 'squint', 0.75));
+  fx.converge(gp, role.color, { count: 46 });
+  fx.converge(gp, 0xffffff, { count: 16, radius: 0.22 });
+  later(0.26, () => {
+    skin.pulse();
+    fx.glow(gp, 0xffffff, 0.5, 0.35);
+    fx.ring(gp, role.color, camPos, { radius: 0.5, life: 0.4 });
+    fx.ring(gp, 0xffffff, camPos, { radius: 0.32, life: 0.3 });
+    fx.halftone(role.color, () => {
+      targets.reset();
+      world.clearProps();
+      world.setRole(role, 0);
+      skin.setRole(role);
+    });
+  });
+  later(0.75, () => {
+    eyesAll((e) => { setExpression(e, 'happy', 0.8); setBaseExpression(e, 'focus'); });
+    fx.shards(gloveAnchor(), starShard(), [role.color, 0xffffff, 0xffe45c], { count: 12, speed: 1.3, life: 1.0, glowing: true, gravity: -0.8, up: 0.5 });
+  });
+  later(0.8, () => showTitle(role));
+  later(1.8, () => {
     state = 'play';
     targets.start(role, headY, () => later(0.4, () => moonSequence(i)));
   });
@@ -361,6 +378,8 @@ function moonSequence(i) {
   moon.position.copy(from);
   scene.add(moon);
   audio.play('moon');
+  eyesAll((e) => { setExpression(e, 'wow', 0.5); setBaseExpression(e, 'idle'); });
+  later(0.6, () => eyesAll((e) => setExpression(e, 'happy', 1.6)));
   fx.text('POWER MOON!', show.clone().add(new THREE.Vector3(0, 0.2, 0)), hexStr(role.color), { height: 0.1, life: 1.8 });
   anims.push({
     t: 0,
@@ -418,10 +437,12 @@ function worldMontage() {
   const seq = [...ROLES, ...ROLES];
   seq.forEach((role, k) => {
     later(k * 0.32, () => {
-      world.setRole(role, k);
-      skin.setRole(role);
-      fx.flash(role.color, 0.25);
+      fx.halftone(role.color, () => {
+        world.setRole(role, k);
+        skin.setRole(role);
+      }, { cover: 0.09, hold: 0, reveal: 0.16 });
       fx.burst(gloveAnchor(), role.color, { count: 60, speed: 2 });
+      eyesAll((e) => setExpression(e, k % 2 ? 'squint' : 'wow', 0.3));
       audio.play('tick');
     });
   });
@@ -429,9 +450,11 @@ function worldMontage() {
 }
 
 function finaleEnd() {
-  world.setRole(HUB, 0);
-  skin.setRole(HUB);
-  fx.flash(0xffffff, 1.0);
+  fx.halftone(0xffd36b, () => {
+    world.setRole(HUB, 0);
+    skin.setRole(HUB);
+  }, { cover: 0.2, hold: 0.05, reveal: 0.7 });
+  eyesAll((e) => { setBaseExpression(e, 'happy'); setExpression(e, 'happy', Infinity); });
   audio.play('transform');
   const orbit = ROLES.map((r) => {
     const m = makeMoon(r.color);
@@ -488,6 +511,7 @@ function resetAll() {
 
 function enterHub() {
   state = 'hub';
+  eyesAll((e) => { setBaseExpression(e, 'idle'); setExpression(e, 'idle', 0); });
   world.setRole(HUB, 0);
   skin.setRole(HUB);
 }
@@ -541,14 +565,36 @@ let hitstop = 0;
 // ?tilt=<rad> pitches the desktop camera down, e.g. to check the island
 const TILT = Number(params.get('tilt')) || 0;
 
+// blob shadows under the tracked hands
+const handShadows = [blobShadow(0.22, 0), blobShadow(0.22, 0)];
+handShadows.forEach((s) => scene.add(s));
+
+// frame timing for checking the headset over devtools: window.__perf
+const perf = { fps: 0, worstMs: 0, frames: 0, acc: 0, worst: 0 };
+window.__perf = perf;
+// handles for poking at the scene from devtools (desktop or headset)
+window.__dbg = { fx, scene, camera, renderer, world, skin };
+
 targets.onHit = (t) => {
   hitstop = 0.06;
   skin.pulse();
+  eyesAll((e) => setExpression(e, targets.hits % 2 ? 'happy' : 'squint', 0.4));
   if (!renderer.xr.isPresenting) punch(t.obj.position.x < 0 ? 'left' : 'right');
 };
 
 renderer.setAnimationLoop(() => {
-  let dt = Math.min(clock.getDelta(), DT_MAX);
+  const raw = clock.getDelta();
+  perf.frames++;
+  perf.acc += raw;
+  perf.worst = Math.max(perf.worst, raw);
+  if (perf.acc >= 1) {
+    perf.fps = Math.round(perf.frames / perf.acc);
+    perf.worstMs = Math.round(perf.worst * 1000);
+    perf.frames = 0;
+    perf.acc = 0;
+    perf.worst = 0;
+  }
+  let dt = Math.min(raw, DT_MAX);
   const t = clock.elapsedTime;
   if (hitstop > 0) {
     hitstop -= dt;
@@ -601,6 +647,12 @@ renderer.setAnimationLoop(() => {
         pressButton();
       } else if (d > 0.06) buttonArmed = true;
     }
+    [left, right].forEach((h, k) => {
+      const p = jointPos(h, 'middle-finger-metacarpal', new THREE.Vector3());
+      const sh = handShadows[k];
+      sh.material.opacity = p && Math.hypot(p.x, p.z) < 1.3 ? 0.22 * Math.max(0, 1 - p.y / 2) : 0;
+      if (p) sh.position.set(p.x, 0.006, p.z);
+    });
     for (const h of [left, right]) {
       const p = jointPos(h, 'middle-finger-metacarpal', new THREE.Vector3());
       if (p) hitPoints.push(p);
