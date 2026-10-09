@@ -37,7 +37,7 @@ renderer.xr.setFoveation(0.5);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.02, 200);
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.02, 300);
 camera.position.set(0, 1.6, 0);
 scene.add(camera);
 
@@ -46,7 +46,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.5, 0.82);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.5, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -90,7 +90,7 @@ const handFactory = new XRHandModelFactory(handLoader, (object) => {
     handModel.remove(object);
     return;
   }
-  skin.apply(object);
+  skin.apply(object, object.userData.handedness);
   if (object.userData.handedness === 'left') xrButton = attachEyes(object);
 });
 // WebXR puts a reconnecting hand in whichever slot is free, so slot 0 can be the
@@ -165,7 +165,7 @@ const gltf = new GLTFLoader();
 for (const side of ['left', 'right']) {
   gltf.load(`${BASE}models/hands/${side}.glb`, (g) => {
     const obj = g.scene;
-    skin.apply(obj);
+    skin.apply(obj, side);
     orientDeskHand(obj, side);
     const holder = new THREE.Group();
     holder.add(obj);

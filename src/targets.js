@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HITS_PER_ROLE, TARGETS_PER_ROLE } from './roles.js';
+import { toon } from './gloveProps.js';
 import {
   assetTexture, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
 } from './textures.js';
@@ -66,8 +67,8 @@ export class Targets {
   build(type, i) {
     switch (type) {
       case 'paper': {
-        const front = new THREE.MeshStandardMaterial({ map: assetTexture('paper_cover.png', paperPlaceholder), color: 0xd8d8d8, roughness: 0.9 });
-        const side = new THREE.MeshStandardMaterial({ color: 0xc9c5ba, roughness: 0.9 });
+        const front = toon(0xffffff, { map: assetTexture('paper_cover.png', paperPlaceholder) });
+        const side = toon(0xe8e1cf);
         const m = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.02), [side, side, side, side, front, side]);
         return m;
       }

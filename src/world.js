@@ -5,8 +5,11 @@ import { assetTexture, bgPlaceholder, glowTexture } from './textures.js';
 // in front (GPT images are not seamless 360s, so the edges fade into the sky),
 // a floating platform under the player, drifting dust and role-tinted lights.
 
-const PANO_RADIUS = 26;
-const PANO_ARC = THREE.MathUtils.degToRad(200);
+// A narrower arc packs more of the 1536px image into each degree, so the
+// panorama reads sharper and farther away. ?arc=<deg>&r=<m> override for testing.
+const query = new URLSearchParams(location.search);
+const PANO_RADIUS = Number(query.get('r')) || 40;
+const PANO_ARC = THREE.MathUtils.degToRad(Number(query.get('arc')) || 160);
 
 export class World {
   constructor(scene) {
@@ -19,7 +22,7 @@ export class World {
       accent: { value: new THREE.Color() },
     };
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(60, 48, 24),
+      new THREE.SphereGeometry(Math.max(60, PANO_RADIUS * 1.5), 48, 24),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
