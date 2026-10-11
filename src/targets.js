@@ -23,6 +23,33 @@ const hexStr = (n) => '#' + n.toString(16).padStart(6, '0');
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
 const easeOutBack = (k) => { const x = k - 1; return 1 + 2.7 * x * x * x + 1.7 * x * x; };
 
+// The 12 edges of a cube of side `size` as one merged tube geometry.
+const edgeGeos = new Map();
+function blockEdges(size, radius) {
+  const key = `${size}/${radius}`;
+  if (edgeGeos.has(key)) return edgeGeos.get(key);
+  const h = size / 2;
+  const parts = [];
+  for (let axis = 0; axis < 3; axis++) {
+    for (const a of [-h, h]) {
+      for (const b of [-h, h]) {
+        const tube = new THREE.CylinderGeometry(radius, radius, size + radius * 2, 8, 1, true);
+        if (axis === 0) tube.rotateZ(Math.PI / 2).translate(0, a, b);
+        else if (axis === 1) tube.translate(a, 0, b);
+        else tube.rotateX(Math.PI / 2).translate(a, b, 0);
+        parts.push(tube);
+      }
+    }
+  }
+  const geo = mergeGeometries(parts);
+  edgeGeos.set(key, geo);
+  return geo;
+}
+const edgeCoreMat = new THREE.MeshBasicMaterial({ color: 0xd8f0ff, toneMapped: false });
+const edgeGlowMat = new THREE.MeshBasicMaterial({
+  color: 0x3d9bff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+});
+
 export class Targets {
   constructor(scene, world, fx, audio) {
     this.scene = scene;
@@ -66,7 +93,7 @@ export class Targets {
     const role = this.role;
     const lane = (this.spawned % 3) - 1 + (Math.random() - 0.5) * 0.5;
     // chest height, so the cards and photos hung above stay clear of the flight path
-    const end = new THREE.Vector3(lane * 0.28, this.headY - 0.45 + (Math.random() - 0.3) * 0.3, REACH_Z);
+    const end = new THREE.Vector3(lane * 0.28, this.headY - 0.3 + (Math.random() - 0.3) * 0.3, REACH_Z);
     const start = new THREE.Vector3(end.x * 4, end.y + 1.2, SPAWN_Z);
     const obj = this.build(role.target, this.spawned);
     obj.position.copy(start);
@@ -91,7 +118,11 @@ export class Targets {
         const geo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
         const fill = toon(0x1f7bff, { transparent: true, opacity: 0.16, depthWrite: false });
         g.add(new THREE.Mesh(geo, fill));
-        g.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0x9cc8ff, toneMapped: false })));
+        // GL lines are 1px on the headset, so the edges are thin bright tubes with
+        // a wider additive tube and a halo around them to read as a glow
+        g.add(new THREE.Mesh(blockEdges(0.32, 0.007), edgeCoreMat));
+        g.add(new THREE.Mesh(blockEdges(0.32, 0.02), edgeGlowMat));
+        g.add(halo(0x4aa8ff, 0.75, 0.3));
         g.userData.fill = fill;
         return g;
       }
@@ -109,7 +140,7 @@ export class Targets {
       }
       case 'card': {
         // a thick card with gold edges: back faces the player while flying (+z),
-        // the life scene is on -z and shows once it flips
+        // the major arcana face is on -z and shows once it flips
         const g = new THREE.Group();
         // the face is assigned on hit, so the six hit cards are always tarot_1..6
         const gold = toon(0xf2c14e, { spec: 0.8 });

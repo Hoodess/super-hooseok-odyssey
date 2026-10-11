@@ -64,7 +64,7 @@ npm run build    # dist/ 생성
 assets/
   bg/      bg_hub, bg_grad, bg_arch, bg_ta, bg_fortune, bg_travel1~3 (.png, 1536×1024)
   glove/   glove_grad, glove_arch, glove_ta, glove_fortune, glove_travel (.png, 1024²)
-  tarot/   tarot_back, tarot_1~5 (.png, 1024×1536)
+  tarot/   tarot_back, tarot_1~6 (.png, 1024×1536)
   images/  paper_cover, stamp_accepted, still_open, still_five (.png)
   sfx/     sfx_roulette, sfx_transform, sfx_moon (.mp3) + CC0 효과음
   photos/  실제 여행 사진 5장 (photo_1.jpg ~ photo_5.jpg)

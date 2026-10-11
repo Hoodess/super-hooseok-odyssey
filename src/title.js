@@ -67,7 +67,7 @@ export class TitleScreen {
   show(headY) {
     this.buildLabel();
     this.logo.position.set(0, headY + 0.32, -1.7);
-    this.button.position.set(0, headY - 0.3, -0.6);
+    this.button.position.set(0, headY - 0.15, -0.6);
     this.button.rotation.x = -0.35; // tilted up toward the face
     this.group.visible = true;
     this.active = true;
@@ -83,6 +83,7 @@ export class TitleScreen {
   press(audio) {
     if (!this.active || this.pressed >= 0) return false;
     this.pressed = 0;
+    audio.unlock();
     audio.play('start');
     return true;
   }

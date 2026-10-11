@@ -23,6 +23,7 @@ export class Audio {
     this.ctx = null;
     this.buffers = {};
     this.music = null;
+    this.wantMusic = false;
   }
 
   // must be called from a user gesture (click / VR enter)
@@ -33,6 +34,8 @@ export class Audio {
       this.music.loop = true;
       this.music.volume = 0.6;
     }
+    // a song that was blocked before the first gesture starts now
+    if (this.wantMusic && this.music.paused) this.music.play().catch(() => {});
     if (this.ctx) {
       this.ctx.resume();
       return;
@@ -56,17 +59,22 @@ export class Audio {
   startMusic() {
     const m = this.music;
     if (!m || !m.paused) return;
+    this.wantMusic = true;
     m.currentTime = 0;
     m.play().catch(() => {});
   }
 
   stopMusic() {
+    this.wantMusic = false;
     if (this.music) this.music.pause();
   }
 
   play(name) {
     const ctx = this.ctx;
     if (!ctx || !ENABLED.has(name)) return;
+    // On Quest the context can still be suspended after ENTER VR; once the page
+    // has had any gesture a later resume() is allowed, so keep trying.
+    if (ctx.state === 'suspended') ctx.resume();
     const buf = this.buffers[name];
     if (buf) {
       const src = ctx.createBufferSource();

@@ -24,10 +24,20 @@ const query = new URLSearchParams(location.search);
 const PANO_RADIUS = Number(query.get('r')) || 40;
 const PANO_ARC = THREE.MathUtils.degToRad(Number(query.get('arc')) || 160);
 
+// Aerial haze: far things fade toward a light tint of the role's sky, the way
+// Odyssey's kingdoms soften with distance. Squared falloff keeps the island and
+// targets crisp; the panorama (no fog in its shader) gets a flat HAZE mix.
+const FOG_DENSITY = 0.02;
+const HAZE = 0.18;
+
 export class World {
   constructor(scene) {
     this.group = new THREE.Group();
     scene.add(this.group);
+    // kept on the scene even in the void (density 0 there) so toggling never
+    // recompiles every material
+    this.fog = new THREE.FogExp2(0xffffff, FOG_DENSITY);
+    scene.fog = this.fog;
 
     this.skyUniforms = {
       top: { value: new THREE.Color() },
@@ -54,6 +64,7 @@ export class World {
             vec3 c = mix(bottom, top, smoothstep(-0.35, 0.6, h));
             c += accent * 0.35 * exp(-abs(h) * 6.0);
             gl_FragColor = vec4(c, 1.0);
+            #include <tonemapping_fragment>
             #include <colorspace_fragment>
           }`,
       }),
@@ -70,7 +81,7 @@ export class World {
       side: THREE.BackSide,
       transparent: true,
       depthWrite: false,
-      uniforms: { map: { value: null }, opacity: { value: 1 } },
+      uniforms: { map: { value: null }, opacity: { value: 1 }, haze: { value: this.fog.color }, hazeAmt: { value: HAZE } },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
         void main() {
@@ -78,14 +89,15 @@ export class World {
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: /* glsl */ `
-        uniform sampler2D map; uniform float opacity;
+        uniform sampler2D map; uniform float opacity; uniform vec3 haze; uniform float hazeAmt;
         varying vec2 vUv;
         void main() {
           vec2 uv = vec2(1.0 - vUv.x, vUv.y);
           vec4 t = texture2D(map, uv);
           float a = smoothstep(0.0, 0.14, vUv.x) * smoothstep(1.0, 0.86, vUv.x)
                   * smoothstep(0.0, 0.12, vUv.y) * smoothstep(1.0, 0.85, vUv.y);
-          gl_FragColor = vec4(t.rgb, a * opacity);
+          gl_FragColor = vec4(mix(t.rgb, haze, hazeAmt), a * opacity);
+          #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }`,
     });
@@ -119,7 +131,7 @@ export class World {
     dustGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.dustMat = new THREE.PointsMaterial({
       size: 0.08, map: glowTexture(), transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, color: 0xffffff, toneMapped: false,
+      blending: THREE.AdditiveBlending, color: 0xffffff, toneMapped: false, fog: false,
     });
     this.dust = new THREE.Points(dustGeo, this.dustMat);
     this.group.add(this.dust);
@@ -154,6 +166,7 @@ export class World {
     this.hemi.groundColor.setHex(l.ground);
     this.key.color.setHex(l.key);
     this.rim.color.setHex(l.rim);
+    this.fog.color.setHex(l.sky).lerp(new THREE.Color(0xffffff), 0.25);
     LOOK.rimColor.value.setHex(l.rim);
     LOOK.shadowTint.value.setHex(l.shadow);
     this.island.setRole(role);
@@ -164,6 +177,7 @@ export class World {
   setVoid(on, { keepDust = false } = {}) {
     for (const o of [this.sky, this.pano, this.island.group, this.ring, this.props]) o.visible = !on;
     this.dust.visible = !on || keepDust;
+    this.fog.density = on ? 0 : FOG_DENSITY;
     this.dustMat.opacity = 1;
   }
 

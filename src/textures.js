@@ -225,7 +225,7 @@ export function tarotBackPlaceholder() {
 }
 
 export function tarotFrontPlaceholder(i) {
-  const titles = ['THE STUDENT', 'THE BUILDER', 'THE MAGICIAN', 'THE STAR', 'THE WORLD'];
+  const titles = ['THE MAGICIAN', 'THE LOVERS', 'STRENGTH', 'TEMPERANCE', 'THE SUN', 'THE WORLD'];
   return () =>
     canvas(512, 768, (g, w, h) => {
       const grad = g.createLinearGradient(0, 0, 0, h);

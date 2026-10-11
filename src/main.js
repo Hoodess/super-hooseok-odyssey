@@ -40,10 +40,11 @@ const DT_MAX = params.has('test') ? 0.4 : 1 / 20;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: params.has('capture') });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-// No filmic tone mapping: the toon look wants flat, saturated color, and the
-// desktop's post chain tone-maps everything (ignoring material.toneMapped), so
-// ACES there made the desktop and the headset disagree.
-renderer.toneMapping = THREE.NoToneMapping;
+// Neutral tone mapping rolls bright highlights off softly without ACES's hue
+// shifts, so the toon colors stay saturated. In the headset materials with
+// toneMapped: false (glows, UI) stay untouched; the desktop's post chain maps
+// everything, so those read a little softer there.
+renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
 renderer.xr.setFoveation(0.5);
@@ -582,6 +583,10 @@ window.addEventListener('pointerdown', (e) => {
   audio.unlock();
   if (state === 'title' && e.target === renderer.domElement) title.press(audio);
 });
+// A Quest pinch only counts as a user gesture from pointerup on, so the
+// pointerdown above can be too early; capture the click before ENTER VR sees it.
+window.addEventListener('pointerup', () => audio.unlock());
+window.addEventListener('click', () => audio.unlock(), true);
 
 // director-mode jumps skip the title screen
 function leaveTitle() {
@@ -593,6 +598,10 @@ function leaveTitle() {
 
 renderer.xr.addEventListener('sessionstart', () => {
   audio.unlock();
+  // The ENTER VR pinch does not always reach the page as a gesture on Quest,
+  // but XR select / squeeze events do count, so any pinch in VR unlocks sound.
+  const session = renderer.xr.getSession();
+  for (const ev of ['selectstart', 'selectend', 'squeezestart']) session.addEventListener(ev, () => audio.unlock());
   desk.visible = false;
   later(0.6, () => {
     const p = camera.getWorldPosition(new THREE.Vector3());
@@ -627,7 +636,7 @@ handShadows.forEach((s) => scene.add(s));
 const perf = { fps: 0, worstMs: 0, frames: 0, acc: 0, worst: 0 };
 window.__perf = perf;
 // handles for poking at the scene from devtools (desktop or headset)
-window.__dbg = { fx, scene, camera, renderer, world, skin };
+window.__dbg = { fx, scene, camera, renderer, world, skin, audio };
 
 targets.onHit = (t) => {
   hitstop = 0.06;
