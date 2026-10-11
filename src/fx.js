@@ -226,6 +226,14 @@ export class FX {
     }
   }
 
+  // Fast fade to solid white, `onPeak` while the view is fully covered, then
+  // the white drops away quickly so whatever onPeak set up pops into view.
+  whiteout(onPeak, { rise = 0.22, hold = 0.1, fall = 0.4 } = {}) {
+    this.flashT = 0;
+    this.flashMat.color.setHex(0xffffff);
+    this.whiteAnim = { t: 0, rise, hold, fall, onPeak, fired: false };
+  }
+
   flash(color = 0xffffff, dur = 0.6) {
     this.flashMat.color.setHex(color);
     this.flashT = dur;
@@ -248,7 +256,22 @@ export class FX {
         this.tone.visible = false;
       }
     }
-    if (this.flashT > 0) {
+    const wa = this.whiteAnim;
+    if (wa) {
+      wa.t += dt;
+      let o;
+      if (wa.t < wa.rise) o = Math.pow(wa.t / wa.rise, 2);
+      else {
+        if (!wa.fired) {
+          wa.fired = true;
+          wa.onPeak?.();
+        }
+        o = 1 - Math.min(1, Math.max(0, (wa.t - wa.rise - wa.hold) / wa.fall));
+        o = o * o;
+        if (wa.t >= wa.rise + wa.hold + wa.fall) this.whiteAnim = null;
+      }
+      this.flashMat.opacity = o;
+    } else if (this.flashT > 0) {
       this.flashT = Math.max(0, this.flashT - dt);
       const k = this.flashT / this.flashDur;
       this.flashMat.opacity = Math.pow(k, 1.6);

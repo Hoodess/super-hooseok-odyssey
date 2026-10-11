@@ -449,15 +449,18 @@ function startFinale() {
       lastTick = now;
     },
   });
-  later(2.6, worldMontage);
+  later(3.6, worldMontage);
 }
+
+// the montage's cut interval; the wheel spins through all of it before the whiteout
+const MONTAGE_STEP = 0.42;
 
 function worldMontage() {
   targets.reset();
   world.clearProps();
   const seq = [...ROLES, ...ROLES];
   seq.forEach((role, k) => {
-    later(k * 0.32, () => {
+    later(k * MONTAGE_STEP, () => {
       fx.halftone(role.color, () => {
         world.setVoid(false);
         world.setRole(role, k);
@@ -468,18 +471,24 @@ function worldMontage() {
       audio.play('tick');
     });
   });
-  later(seq.length * 0.32 + 0.1, finaleEnd);
+  later(seq.length * MONTAGE_STEP + 0.1, finaleEnd);
 }
 
+// The spinning wheel snaps to white; under the white the world goes black and
+// the logo starts popping, so it lands as the white drops away.
 function finaleEnd() {
-  fx.halftone(0xffd36b, () => {
+  fx.whiteout(() => {
     roulette.hide();
     hud.group.visible = false;
     world.setRole(HUB, 0);
     // black behind the logo, with just the drifting snow left
     world.setVoid(true, { keepDust: true });
     skin.setRole(HUB);
-  }, { cover: 0.2, hold: 0.05, reveal: 0.7 });
+    revealLogo();
+  });
+}
+
+function revealLogo() {
   eyesAll((e) => { setBaseExpression(e, 'happy'); setExpression(e, 'happy', Infinity); });
   audio.play('transform');
   const orbit = ROLES.map((r) => {
@@ -507,7 +516,7 @@ function finaleEnd() {
   logo.position.set(0, headY + 0.25, -1.7);
   logo.scale.setScalar(0.01);
   logo.visible = true;
-  later(0.5, () => {
+  later(0.25, () => {
     audio.play('moon');
     fx.burst(logo.position, 0xffd36b, { count: 200, speed: 3, size: 0.06 });
   });

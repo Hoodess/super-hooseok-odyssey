@@ -6,31 +6,31 @@ export const ROLE_TEXT = {
     name: '여행가',
     en: 'TRAVELER',
     wheel: '여행가', // short label on the roulette wedge
-    hits: ['찰칵!', '+1 추억', 'NICE SHOT', '여기 어디?', '찰칵찰칵!', '인생샷!'],
+    hits: ['찰칵!', '+1 추억', '+1 경험', '여기 어디?', '여행 최고~', '문화기행!'],
   },
   arch: {
     name: '건축가',
     en: 'ARCHITECT',
     wheel: '건축가',
-    hits: ['+1 층!', '착공!', '준공!', 'BUILD!', '스카이라인!', '완공!'],
+    hits: ['디자인!', '설계!', '프리츠커!', '건축사!', '+1층', '완공!'],
   },
   fortune: {
     name: '포춘텔러',
     en: 'FORTUNE TELLER',
     wheel: '포춘텔러',
-    hits: ['운명 공개!', 'THE STAR', '대길!', '+1 예언', 'FATE!', '보인다…!'],
+    hits: ['카드 오픈!', '재물운!', '직업운!', '+1 예언', '+1 행운', 'THE WORLD'],
   },
   ta: {
     name: '테크니컬 아티스트',
     en: 'TECHNICAL ARTIST',
     wheel: 'TA',
-    hits: ['SHADED!', '+1 셰이더', 'RENDER!', '컴파일 완료', 'TOON!', '60FPS!'],
+    hits: ['XR!', '+1 셰이더', 'RENDER!', '+1 배포', '최적화!', '컴파일 완료!'],
   },
   grad: {
     name: '대학원생',
     en: 'GRAD STUDENT',
     wheel: '대학원생',
-    hits: ['+1 논문!', 'ACCEPTED', '리비전 끝!', 'D-1 클리어', '졸업각!', '디펜스 통과!'],
+    hits: ['KAIST', '+1 과제', '다빈치랩!', '+1 논문', 'ACCEPTED', '디펜스 통과!'],
   },
 };
 
@@ -42,12 +42,13 @@ export const UI = {
 
 // Ending credits, one line each, rising in under the logo in this order.
 export const CREDITS = [
-  '기획 · 연출 · 출연   이후석',
-  '코드   Claude (Anthropic)',
-  '이미지   ChatGPT 이미지 생성',
-  '효과음   Gemini 오디오 생성',
-  '음악   Jump Up, Super Star! — Super Mario Odyssey OST',
-  '2026 문화기술론',
+  'Concept · Direction · Cast   Hooseok Lee',
+  'Code   Claude (Anthropic)',
+  'Images   ChatGPT Images',
+  'Sound Effects   Gemini Lyria 3',
+  'Motif   Super Mario Odyssey (2017, Nintendo)',
+  'Music   Jump Up, Super Star! — Super Mario Odyssey OST',
+  '2026 Introduction to Culture Technology',
 ];
 
 // every string above, for preloading the font's glyphs

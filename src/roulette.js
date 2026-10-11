@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { textCanvas, glowTexture } from './textures.js';
+import { textCanvas, glowTexture, canvas } from './textures.js';
 import { halo } from './gloveProps.js';
 
 // A chunky toy roulette: five beveled toon wedges with an icon and name each,
@@ -15,6 +15,51 @@ const flat = (color, extra = {}) => new THREE.MeshBasicMaterial({ color, ...extr
 const ICONS = { grad: '📄', arch: '📐', ta: '💻', fortune: '🔮', travel: '📷' };
 const OVERSHOOT = 0.14;
 const SETTLE = 0.45;
+
+// Soft shading baked into vertex colors. They multiply the material color, so
+// the unlit wheel still takes role colors, the winner pulse and the finale's
+// color cycling, but now reads as molded plastic instead of flat paint.
+const LIGHT = new THREE.Vector3(-0.45, 0.6, 0.66).normalize();
+function bake(geo, fn) {
+  const n = geo.attributes.normal;
+  const p = geo.attributes.position;
+  const c = new Float32Array(n.count * 3);
+  for (let i = 0; i < n.count; i++) {
+    const v = fn(n.getX(i), n.getY(i), n.getZ(i), p.getX(i), p.getY(i));
+    c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = v;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return geo;
+}
+// for parts that do not turn with the wheel: lit from the upper left
+const lit = (geo, base = 0.72, amp = 0.45) =>
+  bake(geo, (x, y, z) => base + amp * Math.max(0, x * LIGHT.x + y * LIGHT.y + z * LIGHT.z));
+const shaded = (color, extra = {}) => flat(color, { vertexColors: true, ...extra });
+
+// Glossy sheen over the upper left of the face; it stays put while the wheel turns.
+function sheenTexture() {
+  const c = canvas(256, 256, (g, w, h) => {
+    const grad = g.createRadialGradient(w * 0.34, h * 0.3, 0, w * 0.34, h * 0.3, w * 0.5);
+    grad.addColorStop(0, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(0.45, 'rgba(255,255,255,0.16)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
+    g.fill();
+    // a darker lower right so the face looks domed
+    const low = g.createRadialGradient(w * 0.7, h * 0.75, 0, w * 0.7, h * 0.75, w * 0.55);
+    low.addColorStop(0, 'rgba(20,8,40,0.22)');
+    low.addColorStop(1, 'rgba(20,8,40,0)');
+    g.fillStyle = low;
+    g.beginPath();
+    g.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2);
+    g.fill();
+  });
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
 
 function textPlane(c, height, depthTest = true) {
   const tex = new THREE.CanvasTexture(c);
@@ -33,8 +78,14 @@ function wedgeGeometry(a0, a1) {
   s.moveTo(0, 0);
   s.absarc(0, 0, R, a0, a1, false);
   s.lineTo(0, 0);
-  return new THREE.ExtrudeGeometry(s, {
-    depth: DEPTH, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.003, bevelSegments: 2, curveSegments: 24,
+  const geo = new THREE.ExtrudeGeometry(s, {
+    depth: DEPTH, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 3, curveSegments: 24,
+  });
+  // the face brightens toward the hub; bevels and sides go darker the more
+  // they turn away from the viewer, which outlines each wedge as a raised tile
+  return bake(geo, (x, y, z, px, py) => {
+    if (z > 0.97) return 1.14 - 0.32 * Math.min(1, Math.hypot(px, py) / R);
+    return 0.5 + 0.35 * Math.max(0, z);
   });
 }
 
@@ -67,7 +118,7 @@ export class Roulette {
     this.group.add(plate);
 
     roles.forEach((role, i) => {
-      const mat = flat(role.color);
+      const mat = shaded(role.color);
       this.wedgeMats.push(mat);
       const w = new THREE.Mesh(wedgeGeometry(i * this.step + 0.012, (i + 1) * this.step - 0.012), mat);
       this.wheel.add(w);
@@ -75,7 +126,7 @@ export class Roulette {
     });
 
     const gold = flat(0xffc93c);
-    const goldDark = flat(0xc98a1a);
+    const goldLit = shaded(0xffc93c);
     // pegs sit on the wedge borders and are what the flapper catches on
     this.pegs = roles.map((_, i) => {
       const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 10), gold);
@@ -86,12 +137,37 @@ export class Roulette {
       return peg;
     });
 
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.012, 0.013, 12, 72), gold);
+    // cream spokes raised between the wedges, from the hub ring out to the rim
+    const spokeMat = shaded(0xfff4dc);
+    for (let i = 0; i < roles.length; i++) {
+      const a = i * this.step;
+      const len = R * 0.72;
+      const geo = lit(new THREE.BoxGeometry(len, 0.0045, 0.006), 0.8, 0.3);
+      const spoke = new THREE.Mesh(geo, spokeMat);
+      spoke.position.set(Math.cos(a) * (R * 0.26 + len / 2), Math.sin(a) * (R * 0.26 + len / 2), DEPTH + 0.004);
+      spoke.rotation.z = a;
+      this.wheel.add(spoke);
+    }
+
+    // contact shadows: the face darkens just inside the rim and around the hub
+    const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1a0830, transparent: true, opacity: 0.28, depthWrite: false });
+    const rimShadow = new THREE.Mesh(new THREE.RingGeometry(R - 0.014, R + 0.002, 72), shadowMat);
+    rimShadow.position.z = DEPTH + 0.0055;
+    const hubShadow = new THREE.Mesh(new THREE.RingGeometry(R * 0.25, R * 0.36, 48), shadowMat);
+    hubShadow.position.z = DEPTH + 0.0055;
+    this.group.add(rimShadow, hubShadow);
+
+    const sheen = new THREE.Mesh(
+      new THREE.CircleGeometry(R + 0.002, 64),
+      new THREE.MeshBasicMaterial({ map: sheenTexture(), transparent: true, depthWrite: false, toneMapped: false }),
+    );
+    sheen.position.z = DEPTH + 0.009;
+    sheen.renderOrder = 7;
+    this.group.add(sheen);
+
+    const rim = new THREE.Mesh(lit(new THREE.TorusGeometry(R + 0.012, 0.013, 16, 96), 0.68, 0.5), goldLit);
     rim.position.z = 0.008;
-    const rimShade = new THREE.Mesh(new THREE.TorusGeometry(R + 0.012, 0.0135, 12, 72, Math.PI), goldDark);
-    rimShade.position.z = 0.006;
-    rimShade.rotation.z = Math.PI; // lower half reads as the shaded side
-    this.group.add(rimShade, rim);
+    this.group.add(rim);
     this.bulbMats = [];
     this.bulbHalos = [];
     for (let i = 0; i < 24; i++) {
@@ -106,11 +182,18 @@ export class Roulette {
       this.bulbHalos.push(h);
     }
 
-    this.hub = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.24, R * 0.26, 0.02, 32), flat(0xffffff));
-    this.hub.rotation.x = Math.PI / 2;
+    this.hub = new THREE.Mesh(
+      lit(new THREE.CylinderGeometry(R * 0.24, R * 0.26, 0.02, 32).rotateX(Math.PI / 2), 0.7, 0.4),
+      shaded(0xffffff),
+    );
     this.hub.position.z = 0.016;
     this.group.add(this.hub);
-    const star = new THREE.Mesh(starGeometry(0.026, 0.011, 0.006), gold);
+    const hubRing = new THREE.Mesh(lit(new THREE.TorusGeometry(R * 0.255, 0.004, 10, 48), 0.68, 0.5), goldLit);
+    hubRing.position.z = 0.026;
+    this.group.add(hubRing);
+    // the star turns, so its shading is just a bright face and darker bevels
+    const starGeo = bake(starGeometry(0.026, 0.011, 0.006), (x, y, z) => (z > 0.97 ? 1.12 : 0.6 + 0.3 * Math.max(0, z)));
+    const star = new THREE.Mesh(starGeo, goldLit);
     star.position.z = 0.026;
     this.group.add(star);
     this.star = star;
@@ -119,11 +202,10 @@ export class Roulette {
     // flapper: hinged at the top, tip pointing down into the wheel
     this.flapper = new THREE.Group();
     this.flapper.position.set(0, R + 0.05, 0.03);
-    const red = flat(0xe8302a);
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.05, 16), red);
-    tip.rotation.z = Math.PI;
+    const red = shaded(0xe8302a);
+    const tip = new THREE.Mesh(lit(new THREE.ConeGeometry(0.016, 0.05, 16).rotateZ(Math.PI)), red);
     tip.position.y = -0.03;
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.014, 16, 12), red);
+    const knob = new THREE.Mesh(lit(new THREE.SphereGeometry(0.014, 16, 12)), red);
     const pin = new THREE.Mesh(new THREE.SphereGeometry(0.006, 10, 8), gold);
     pin.position.z = 0.012;
     const shine = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), flat(0xffffff));
@@ -252,7 +334,7 @@ export class Roulette {
       const tick = Math.floor(this.wheel.rotation.z / this.step);
       if (tick !== a.lastTick) {
         a.lastTick = tick;
-        this.flapV += 9;
+        this.flapV -= 9;
         a.onTick?.();
       }
       const hue = (t * 1.5) % 1;
@@ -275,7 +357,7 @@ export class Roulette {
     if (tick !== a.lastTick) {
       const dir = Math.sign(tick - a.lastTick);
       a.lastTick = tick;
-      this.flapV += 9 * dir;
+      this.flapV -= 9 * dir; // the wheel turns counter-clockwise: pegs kick the tip left
       a.onTick?.();
     }
     if (a.finale) {
