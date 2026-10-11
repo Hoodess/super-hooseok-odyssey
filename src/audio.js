@@ -12,6 +12,9 @@ const FILES = {
   press: 'press.ogg',
 };
 
+// Only these names make a sound; every other play() call is muted.
+const ENABLED = new Set(['start']);
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -30,6 +33,7 @@ export class Audio {
     this.master.connect(this.ctx.destination);
     const base = `${import.meta.env.BASE_URL}sfx/`;
     for (const [name, file] of Object.entries(FILES)) {
+      if (!ENABLED.has(name)) continue;
       fetch(base + file)
         .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
         .then((ab) => this.ctx.decodeAudioData(ab))
@@ -40,7 +44,7 @@ export class Audio {
 
   play(name) {
     const ctx = this.ctx;
-    if (!ctx) return;
+    if (!ctx || !ENABLED.has(name)) return;
     const buf = this.buffers[name];
     if (buf) {
       const src = ctx.createBufferSource();
