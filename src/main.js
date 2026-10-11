@@ -619,6 +619,11 @@ renderer.xr.addEventListener('sessionend', () => {
 // ---------- loop ----------
 
 const helpEl = document.getElementById('help');
+// VRButton prefers navigator.xr.offerSession, which on Quest lets the user enter
+// VR from the browser's own prompt; the page then never sees a gesture and the
+// first run stays silent. Hiding it makes ENTER VR a real click on the page,
+// which unlocks the sound before the session starts.
+if (navigator.xr) Object.defineProperty(navigator.xr, 'offerSession', { value: undefined });
 document.body.appendChild(VRButton.createButton(renderer, { optionalFeatures: ['hand-tracking', 'local-floor'] }));
 
 const clock = new THREE.Clock();
