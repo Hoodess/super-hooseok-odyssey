@@ -274,6 +274,8 @@ title.onStart = () => {
     hud.group.visible = true;
     hud.intro();
     enterHub();
+    // once the dots have opened up again the first roulette spins by itself
+    later(1.5, () => { if (state === 'hub' && next === 0) pressButton(); });
   }, { cover: 0.35, hold: 0.1, reveal: 0.6 });
 };
 
@@ -305,6 +307,7 @@ function pressButton() {
   if (state === 'end') return resetAll();
   if (state !== 'hub' && state !== 'idle') return;
   audio.play('press');
+  if (next === 0) audio.startMusic();
   allButtons.forEach((b) => (b.userData.pressT = 0.3));
   skin.pulse();
   if (next >= ROLES.length) return startFinale();
@@ -523,6 +526,7 @@ function finaleEnd() {
 }
 
 function resetAll() {
+  audio.stopMusic();
   ending.reset();
   anims.forEach((a) => a.orbit?.forEach((m) => scene.remove(m)));
   anims.length = 0;

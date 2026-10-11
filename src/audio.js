@@ -15,14 +15,24 @@ const FILES = {
 // Only these names make a sound; every other play() call is muted.
 const ENABLED = new Set(['start']);
 
+// Background song, streamed from assets/bgm/ and started by the first roulette press.
+const MUSIC = 'bgm/jump_up_super_star.mp3';
+
 export class Audio {
   constructor() {
     this.ctx = null;
     this.buffers = {};
+    this.music = null;
   }
 
   // must be called from a user gesture (click / VR enter)
   unlock() {
+    if (!this.music) {
+      this.music = new window.Audio(`${import.meta.env.BASE_URL}${MUSIC}`);
+      this.music.preload = 'auto';
+      this.music.loop = true;
+      this.music.volume = 0.6;
+    }
     if (this.ctx) {
       this.ctx.resume();
       return;
@@ -40,6 +50,18 @@ export class Audio {
         .then((buf) => (this.buffers[name] = buf))
         .catch(() => {});
     }
+  }
+
+  // starts the song once; later calls do nothing while it is playing
+  startMusic() {
+    const m = this.music;
+    if (!m || !m.paused) return;
+    m.currentTime = 0;
+    m.play().catch(() => {});
+  }
+
+  stopMusic() {
+    if (this.music) this.music.pause();
   }
 
   play(name) {
