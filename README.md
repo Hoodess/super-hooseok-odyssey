@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/images/logo_alpha.png" alt="Super Hooseok Odyssey" width="420" />
+  <img src="docs/logo_banner.jpg" alt="Super Hooseok Odyssey" width="100%" />
 </p>
 
 <p align="center">
