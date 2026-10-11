@@ -14,7 +14,7 @@ import { ROLES, HUB } from './roles.js';
 import { World } from './world.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
-import { GloveSkin, makeHandButton, BACK_OF_HAND } from './glove.js';
+import { GloveSkin, makeHandButton, updateHandButton, BACK_OF_HAND } from './glove.js';
 import { INFLATE } from './gloveProps.js';
 import { makeCappyEyes, updateEyes, setExpression, setBaseExpression } from './eyes.js';
 import { Roulette } from './roulette.js';
@@ -144,7 +144,7 @@ function attachEyes(handObject) {
   eyes.position.z -= 0.035; // -Z runs toward the fingers: center of the back of the hand
   bone.add(eyes);
   const button = makeHandButton();
-  button.position.copy(BACK_OF_HAND).multiplyScalar(0.018 + INFLATE);
+  button.position.copy(BACK_OF_HAND).multiplyScalar(0.0195 + INFLATE);
   button.position.z += 0.002;
   bone.add(button);
   allEyes.push(eyes);
@@ -472,6 +472,8 @@ function finaleEnd() {
     roulette.hide();
     hud.group.visible = false;
     world.setRole(HUB, 0);
+    // black behind the logo, with just the drifting snow left
+    world.setVoid(true, { keepDust: true });
     skin.setRole(HUB);
   }, { cover: 0.2, hold: 0.05, reveal: 0.7 });
   eyesAll((e) => { setBaseExpression(e, 'happy'); setExpression(e, 'happy', Infinity); });
@@ -627,6 +629,7 @@ targets.onHit = (t) => {
   hitstop = 0.06;
   skin.pulse();
   eyesAll((e) => setExpression(e, targets.hits % 2 ? 'happy' : 'squint', 0.4));
+  if (t.obj.userData.shape) skin.hitShape(t.obj.userData.shape);
   if (!renderer.xr.isPresenting) punch(t.obj.position.x < 0 ? 'left' : 'right');
 };
 
@@ -686,14 +689,16 @@ renderer.setAnimationLoop(() => {
   if (xr) {
     const left = handByName('left');
     const right = handByName('right');
-    const btn = xrButton ? xrButton.getWorldPosition(tmpA) : null;
+    const btn = xrButton ? xrButton.userData.top.getWorldPosition(tmpA) : null;
     const tip = jointPos(right, 'index-finger-tip', tmpB);
+    if (xrButton) xrButton.userData.near = 0;
     if (btn && tip) {
       const d = btn.distanceTo(tip);
-      if (d < 0.028 && buttonArmed) {
+      xrButton.userData.near = Math.min(1, Math.max(0, (0.045 - d) / 0.025));
+      if (d < 0.02 && buttonArmed) {
         buttonArmed = false;
         pressButton();
-      } else if (d > 0.06) buttonArmed = true;
+      } else if (d > 0.055) buttonArmed = true;
     }
     [left, right].forEach((h, k) => {
       const p = jointPos(h, 'middle-finger-metacarpal', new THREE.Vector3());
@@ -717,9 +722,8 @@ renderer.setAnimationLoop(() => {
   // button glow pulse
   const ready = state === 'hub' || state === 'idle' || state === 'end';
   for (const b of allButtons) {
-    const bp = b.userData.pressT > 0 ? (b.userData.pressT -= dt) : 0;
     b.userData.glow.material.opacity = ready ? 0.6 + Math.sin(t * 6) * 0.35 : 0.15;
-    b.scale.setScalar(1 + Math.max(0, bp) * 1.5);
+    updateHandButton(b, dt);
   }
   for (const e of allEyes) updateEyes(e, t);
   skin.update(dt);

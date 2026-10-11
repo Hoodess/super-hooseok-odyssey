@@ -149,11 +149,17 @@ export class FX {
   }
 
   // Chunky debris: an instanced burst of small toon (or glowing) pieces that
-  // tumble, fall and shrink away. `geo` is any small geometry.
-  shards(pos, geo, colors, { count = 18, speed = 2.6, life = 1.0, gravity = -5, size = 1, glowing = false, up = 1.2 } = {}) {
+  // tumble, fall and shrink away. `geo` is any small geometry. Optional: a
+  // texture `map`, see-through pieces (`opacity` < 1), per-vertex colors, and
+  // `flicker` (pieces blink on and off, like sparks of electricity).
+  shards(pos, geo, colors, {
+    count = 18, speed = 2.6, life = 1.0, gravity = -5, size = 1, glowing = false, up = 1.2,
+    map = null, opacity = 1, vertexColors = false, flicker = false,
+  } = {}) {
+    const look = { map, vertexColors, ...(opacity < 1 ? { transparent: true, opacity, depthWrite: false } : {}) };
     const mat = glowing
-      ? new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
-      : toon(0xffffff);
+      ? new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, ...look })
+      : toon(0xffffff, look);
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     mesh.frustumCulled = false;
     const parts = [];
@@ -169,7 +175,7 @@ export class FX {
       mesh.setColorAt(i, c.setHex(colors[i % colors.length]));
     }
     this.scene.add(mesh);
-    this.items.push({ kind: 'shards', obj: mesh, parts, t: 0, life, gravity, ownGeo: false });
+    this.items.push({ kind: 'shards', obj: mesh, parts, t: 0, life, gravity, flicker, ownGeo: false });
   }
 
   // Layered hit spark, all facing the viewer: a white flash core, two
@@ -286,7 +292,8 @@ export class FX {
           pt.v.multiplyScalar(1 - dt * 1.2);
           pt.p.addScaledVector(pt.v, dt);
           pt.q.multiply(dq.setFromAxisAngle(pt.axis, pt.spin * dt));
-          const s = pt.s * (k > 0.6 ? 1 - (k - 0.6) / 0.4 : Math.min(1, k * 12));
+          let s = pt.s * (k > 0.6 ? 1 - (k - 0.6) / 0.4 : Math.min(1, k * 12));
+          if (it.flicker && Math.random() < 0.3) s = 0;
           it.obj.setMatrixAt(j, m4.compose(pt.p, pt.q, sc.setScalar(Math.max(0.001, s))));
         });
         it.obj.instanceMatrix.needsUpdate = true;

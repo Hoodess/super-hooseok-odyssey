@@ -60,7 +60,8 @@ export class Ending {
     const e = k * k * (3 - 2 * k);
     this.shell.material.opacity = e;
     this.world.island.group.position.y = -4 * k * k;
-    if (k >= 1 && this.world.sky.visible) this.world.setVoid(true);
+    this.world.dustMat.opacity = 1 - e;
+    if (k >= 1 && this.world.dust.visible) this.world.setVoid(true);
     this.logo.position.lerpVectors(this.logoFrom, this.logoTo, e);
     this.logo.scale.setScalar(1 - 0.45 * e);
     this.lines.forEach((s, i) => {

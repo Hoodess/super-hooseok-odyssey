@@ -160,8 +160,11 @@ export class World {
   }
 
   // Black void for the title screen: hide the scenery but keep the lights.
-  setVoid(on) {
-    for (const o of [this.sky, this.pano, this.island.group, this.ring, this.dust, this.props]) o.visible = !on;
+  // `keepDust` leaves the drifting dust (the finale's snow on black).
+  setVoid(on, { keepDust = false } = {}) {
+    for (const o of [this.sky, this.pano, this.island.group, this.ring, this.props]) o.visible = !on;
+    this.dust.visible = !on || keepDust;
+    this.dustMat.opacity = 1;
   }
 
   clearProps() {

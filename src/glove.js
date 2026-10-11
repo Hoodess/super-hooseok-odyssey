@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { glowTexture } from './textures.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { buildProps, toon, INFLATE } from './gloveProps.js';
+import { buildProps, toon, inkOutline, INFLATE } from './gloveProps.js';
+import { roleBadge, taScreen } from './handBadges.js';
 
 // In WebXR joint space (and in the generic hand model's bones), +Y points out
 // of the back of the hand and -Z points toward the fingertips.
@@ -59,7 +60,8 @@ diffuseColor.rgb *= 1.0 - 0.2 * vTip;`);
     this.baseEmissive = new THREE.Color();
     this.pulseT = 0;
     this.roleId = 'hub';
-    this.gloves = []; // { object, side, props: Object3D[] }
+    this.time = 0;
+    this.gloves = []; // { object, side, props: Object3D[], ticks: Object3D[] }
   }
 
   setRole(role) {
@@ -82,12 +84,21 @@ diffuseColor.rgb *= 1.0 - 0.2 * vTip;`);
   dress(glove) {
     for (const p of glove.props) p.removeFromParent();
     glove.props = [];
-    for (const { bone, object } of buildProps(this.roleId, glove.side)) {
+    glove.ticks = [];
+    const parts = buildProps(this.roleId, glove.side);
+    if (glove.side === 'right') parts.push(...roleBadge(this.roleId));
+    for (const { bone, object } of parts) {
       const b = glove.object.getObjectByName(bone);
       if (!b) continue;
       b.add(object);
       glove.props.push(object);
+      object.traverse((o) => o.userData.tick && glove.ticks.push(o));
     }
+  }
+
+  // The TA badge's screen shows the shape of the target just hit.
+  hitShape(type) {
+    if (this.roleId === 'ta') taScreen.showShape(type);
   }
 
   pulse() {
@@ -95,6 +106,9 @@ diffuseColor.rgb *= 1.0 - 0.2 * vTip;`);
   }
 
   update(dt) {
+    this.time += dt;
+    for (const g of this.gloves) for (const o of g.ticks) o.userData.tick(dt, this.time);
+    if (this.roleId === 'ta') taScreen.update(dt);
     if (this.pulseT > 0) {
       this.pulseT = Math.max(0, this.pulseT - dt * 3);
       this.material.emissive.copy(this.baseEmissive).lerp(new THREE.Color(0xffffff), this.pulseT * 0.35);
@@ -205,18 +219,59 @@ function attached(object) {
   return o.isScene;
 }
 
-// The glowing button on the back of the left glove that starts the roulette.
-export function makeHandButton(color = 0xff3b30) {
+// The roulette button on the back of the left glove: a flat-topped orange cap
+// standing proud of a cream bezel so it reads against any glove color. The cap sinks a
+// little as a fingertip closes in (userData.near, 0..1), bottoms out on a press
+// (userData.pressT) and springs back up with a small bounce.
+const CAP_REST = 0.006;
+const CAP_TRAVEL = 0.005;
+
+export function makeHandButton(color = 0xff7a1a) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshBasicMaterial({ color, toneMapped: false });
-  const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.009, 0.004, 24), mat);
-  g.add(disc);
+  // the bezel reaches down into the puffy glove so no gap shows underneath
+  const bezel = new THREE.Mesh(new THREE.CylinderGeometry(0.0135, 0.0158, 0.009, 32), toon(0xfff6e8, { spec: 0.5 }));
+  bezel.position.y = 0.0005;
+  inkOutline(bezel, 1.07);
+  const well = new THREE.Mesh(new THREE.CylinderGeometry(0.0112, 0.0112, 0.0094, 28), new THREE.MeshBasicMaterial({ color: 0x1a1030 }));
+  well.position.y = 0.0007;
+  const mat = toon(color, { spec: 0.9, emissive: new THREE.Color(color).multiplyScalar(0.5) });
+  const cap = new THREE.Group();
+  cap.position.y = CAP_REST;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0098, 0.0102, 0.01, 28), mat);
+  inkOutline(body, 1.1);
+  // flat top: a lighter face inset by a thin rim, and a glossy glint
+  const face = new THREE.Mesh(
+    new THREE.CircleGeometry(0.0078, 28),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35), toneMapped: false }),
+  );
+  face.rotation.x = -Math.PI / 2;
+  face.position.y = 0.0051;
+  const shine = new THREE.Mesh(new THREE.CircleGeometry(0.0024, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
+  shine.rotation.x = -Math.PI / 2;
+  shine.scale.set(1, 0.55, 1);
+  shine.position.set(-0.0036, 0.0052, -0.0036);
+  const top = new THREE.Object3D(); // where a fingertip touches the cap
+  top.position.y = 0.005;
   const glow = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: glowTexture(), color, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
   );
   glow.scale.setScalar(0.05);
-  g.add(glow);
-  g.userData.mat = mat;
-  g.userData.glow = glow;
+  glow.position.y = 0.006;
+  cap.add(body, face, shine, top, glow);
+  g.add(bezel, well, cap);
+  Object.assign(g.userData, { mat, glow, cap, top, pressT: 0, near: 0, depth: 0, vel: 0 });
   return g;
+}
+
+export function updateHandButton(button, dt) {
+  const u = button.userData;
+  if (u.pressT > 0) u.pressT = Math.max(0, u.pressT - dt);
+  const target = u.pressT > 0.16 ? 1 : u.near * 0.3;
+  // a stiff, slightly underdamped spring, stepped finely so it stays stable
+  for (let left = dt; left > 0; left -= 1 / 240) {
+    const h = Math.min(left, 1 / 240);
+    u.vel += ((target - u.depth) * 1400 - u.vel * 30) * h;
+    u.depth = Math.min(1.1, Math.max(-0.3, u.depth + u.vel * h));
+  }
+  u.cap.position.y = CAP_REST - u.depth * CAP_TRAVEL;
 }

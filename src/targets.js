@@ -1,9 +1,13 @@
 import * as THREE from 'three';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import helvetikerBold from 'three/examples/fonts/helvetiker_bold.typeface.json';
 import { HITS_PER_ROLE, TARGETS_PER_ROLE } from './roles.js';
-import { toon, inkOutline } from './gloveProps.js';
+import { toon, inkOutline, halo } from './gloveProps.js';
 import { BuildingSlots, makeBuilding, makeFoundation } from './buildings.js';
 import {
-  blobShadow, assetTexture, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
+  blobShadow, assetTexture, canvas, paperPlaceholder, stampPlaceholder, tarotBackPlaceholder, tarotFrontPlaceholder, photoPlaceholder,
 } from './textures.js';
 
 // Spawns the role's targets, flies them at the player, resolves hits and plays
@@ -98,7 +102,10 @@ export class Targets {
           new THREE.TorusKnotGeometry(0.1, 0.035, 96, 14),
           new THREE.IcosahedronGeometry(0.15, 0),
         ];
-        return new THREE.Mesh(geos[i % geos.length], new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95, flatShading: i % 4 === 3 }));
+        const geo = geos[i % geos.length];
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95, flatShading: i % 4 === 3 }));
+        m.userData.shape = geo.type; // the TA's hand screen draws this on a hit
+        return m;
       }
       case 'card': {
         // a thick card with gold edges: back faces the player while flying (+z),
@@ -163,7 +170,7 @@ export class Targets {
         stamp.rotation.z = -0.25;
         t.obj.add(stamp);
         t.stamp = stamp;
-        this.fx.burst(pos, 0xfff6e0, { count: 40, speed: 2.4, size: 0.05, gravity: -1.5 });
+        this.fx.burst(pos, 0xfff6e0, { count: 72, speed: 2.4, size: 0.05, gravity: -1.5 });
         t.vel.set((Math.random() - 0.5) * 1.5, 2.2, -1.2);
         t.post = (dt) => {
           const k = t.t / 1.2;
@@ -195,14 +202,24 @@ export class Targets {
         break;
       }
       case 'mesh': {
-        const looks = [
-          new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.05 }),
-          new THREE.MeshToonMaterial({ color: [0xff5fa2, 0x5fd3ff, 0xffd25f, 0x7dff6b][this.hits % 4] }),
-          new THREE.MeshStandardMaterial({
+        // three looks in turn: polished bronze, a glowing orb, a wireframe
+        const look = (this.hits - 1) % 3;
+        let orbHalo = null;
+        if (look === 0) {
+          t.obj.material = new THREE.MeshStandardMaterial({ color: 0xcd8a4a, emissive: 0x2a1406, metalness: 1, roughness: 0.22 });
+        } else if (look === 1) {
+          // the headset has no bloom, so the orb carries its own halo
+          const c = new THREE.Color([0xff5fa2, 0x5fd3ff, 0xffd25f, 0x7dff6b][this.hits % 4]);
+          t.obj.geometry = new THREE.SphereGeometry(0.13, 32, 20);
+          t.obj.material = new THREE.MeshBasicMaterial({ color: c.clone().lerp(new THREE.Color(0xffffff), 0.6), toneMapped: false });
+          orbHalo = halo(c, 0.75, 0.9);
+          t.obj.add(orbHalo);
+          this.fx.glow(pos, c.getHex(), 0.6, 0.4);
+        } else {
+          t.obj.material = new THREE.MeshStandardMaterial({
             color: 0x22d36b, emissive: 0x22d36b, emissiveIntensity: 1.2, transparent: true, opacity: 0.55, wireframe: true,
-          }),
-        ];
-        t.obj.material = looks[(this.hits - 1) % looks.length];
+          });
+        }
         const from = t.obj.position.clone();
         const to = new THREE.Vector3(from.x * 2.5, this.headY + 0.6, -2.2);
         t.post = (dt) => {
@@ -210,6 +227,7 @@ export class Targets {
           t.obj.position.lerpVectors(from, to, easeOut(k));
           t.obj.rotation.y += dt * 2.5;
           t.obj.rotation.x += dt * 1.2;
+          if (orbHalo) orbHalo.material.opacity = 0.7 + 0.3 * Math.sin(t.t * 14);
           if (k > 0.8) t.obj.scale.setScalar(1 - (k - 0.8) * 5);
           return k >= 1;
         };
@@ -253,22 +271,35 @@ export class Targets {
     const fx = this.fx;
     const g = DEBRIS();
     switch (type) {
-      case 'paper':
-        fx.shards(pos, g.paper, [0xfffaf0, 0xf3ead7, 0xffe45c, 0xff9de0], { count: 16, speed: 2.2, gravity: -2.5, life: 1.3 });
-        fx.shards(pos, g.dot, [0xe8302a], { count: 10, speed: 3, life: 0.7 });
+      case 'paper': {
+        // paper scraps with KAIST logos and mortarboards mixed in
+        const fly = { speed: 2.2, gravity: -2.5, life: 1.3 };
+        fx.shards(pos, g.paper, [0xfffaf0, 0xf3ead7, 0xffe45c, 0xff9de0], { count: 18, ...fly });
+        fx.shards(pos, g.kaist, [0x1a56c4, 0x0b3d91], { count: 6, ...fly });
+        fx.shards(pos, g.mortarboard, [0xffffff], { count: 6, vertexColors: true, ...fly });
+        fx.shards(pos, g.dot, [0xe8302a], { count: 18, speed: 3, life: 0.7 });
         break;
+      }
       case 'block':
-        fx.shards(pos, g.cube, [0x1f7bff, 0xe8f1ff, 0x7fd4ff, 0xffd21a], { count: 16, speed: 2.8, life: 1.0 });
+        fx.shards(pos, g.cube, [0x1f7bff, 0x7fd4ff, 0xff8fb0, 0xffd21a, 0x7dffb0], { count: 32, speed: 2.8, life: 1.0, opacity: 0.55 });
         break;
       case 'mesh':
-        fx.shards(pos, g.pixel, [0x3dff8a, 0xff5fa2, 0x5fd3ff, 0xffd25f], { count: 22, speed: 3, life: 0.9, glowing: true, gravity: -2 });
+        // crackling lightning bolts
+        fx.glow(pos, 0xbff8ff, 0.5, 0.15);
+        fx.shards(pos, g.bolt, [0xfff35c, 0x5fe8ff, 0x3dff8a, 0xffffff], { count: 30, speed: 3.2, life: 0.8, glowing: true, gravity: -1, flicker: true });
+        fx.shards(pos, g.pixel, [0x3dff8a, 0xff5fa2, 0x5fd3ff, 0xffd25f], { count: 14, speed: 3, life: 0.9, glowing: true, gravity: -2 });
         break;
       case 'card':
-        fx.shards(pos, g.star, [0xf2c14e, 0xffffff, 0xc58bff], { count: 16, speed: 2.4, life: 1.2, glowing: true, gravity: -1.2 });
+        fx.shards(pos, g.star, [0xf2c14e, 0xffffff, 0xc58bff], { count: 20, speed: 2.4, life: 1.2, glowing: true, gravity: -1.2 });
+        fx.shards(pos, g.moon, [0xf2c14e, 0xfff3b0, 0xc58bff], { count: 12, speed: 2.4, life: 1.2, glowing: true, gravity: -1.2 });
         break;
       case 'polaroid':
+        // little polaroids burst out, three kinds of snapshot
+        for (const map of polaroidTextures()) {
+          fx.shards(pos, g.polaroid, [0xffffff], { count: 8, speed: 2.6, gravity: -2, life: 1.4, map });
+        }
         fx.shards(pos, g.confetti, [0xffc21a, 0xff8a3d, 0xffffff, 0x5fd3ff, 0xe8302a], { count: 24, speed: 2.6, gravity: -2, life: 1.4 });
-        fx.shards(pos, g.star, [0xfff3b0], { count: 6, speed: 2, life: 0.8, glowing: true });
+        fx.shards(pos, g.star, [0xfff3b0], { count: 12, speed: 2, life: 0.8, glowing: true });
         break;
     }
   }
@@ -387,7 +418,38 @@ function DEBRIS() {
     if (i) star.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     else star.moveTo(Math.cos(a) * r, Math.sin(a) * r);
   }
+  const bolt = new THREE.Shape();
+  bolt.moveTo(-0.002, 0.026);
+  bolt.lineTo(-0.012, -0.002);
+  bolt.lineTo(-0.002, -0.002);
+  bolt.lineTo(-0.008, -0.026);
+  bolt.lineTo(0.012, 0.006);
+  bolt.lineTo(0.002, 0.006);
+  bolt.lineTo(0.01, 0.026);
+  bolt.closePath();
+  const moon = new THREE.Shape();
+  moon.absarc(0, 0, 0.02, Math.PI * 0.25, Math.PI * 1.75, false);
+  moon.absarc(0.01, 0, 0.016, Math.PI * 1.6, Math.PI * 0.4, true);
+  const kaist = new TextGeometry('KAIST', {
+    font: new FontLoader().parse(helvetikerBold), size: 0.014, depth: 0.005, curveSegments: 3,
+    bevelEnabled: true, bevelThickness: 0.0008, bevelSize: 0.0005, bevelSegments: 1,
+  });
+  // a mini mortarboard in one geometry, colored per vertex (cloth and gold tassel)
+  const cloth = 0x2b2840;
+  const gold = 0xf2c14e;
+  const mortarboard = mergeGeometries([
+    painted(new THREE.BoxGeometry(0.044, 0.004, 0.044).rotateY(Math.PI / 4).translate(0, 0.006, 0), cloth),
+    painted(new THREE.CylinderGeometry(0.013, 0.015, 0.012, 16).translate(0, -0.002, 0), cloth),
+    painted(new THREE.SphereGeometry(0.0025, 8, 6).translate(0, 0.0085, 0), gold),
+    painted(new THREE.CylinderGeometry(0.0008, 0.0008, 0.031, 5).rotateZ(Math.PI / 2).translate(0.0155, 0.0085, 0), gold),
+    painted(new THREE.CylinderGeometry(0.0012, 0.0032, 0.012, 8).translate(0.031, 0.002, 0), gold),
+  ]);
   debrisGeo = {
+    kaist: kaist.center(),
+    mortarboard: mortarboard.center(),
+    bolt: new THREE.ExtrudeGeometry(bolt, { depth: 0.004, bevelEnabled: false }).center(),
+    moon: new THREE.ExtrudeGeometry(moon, { depth: 0.005, bevelEnabled: true, bevelSize: 0.001, bevelThickness: 0.001, bevelSegments: 1 }).center(),
+    polaroid: new THREE.BoxGeometry(0.045, 0.054, 0.003),
     paper: new THREE.BoxGeometry(0.05, 0.002, 0.065),
     dot: new THREE.SphereGeometry(0.01, 8, 6),
     cube: new THREE.BoxGeometry(0.045, 0.045, 0.045),
@@ -396,4 +458,50 @@ function DEBRIS() {
     confetti: new THREE.BoxGeometry(0.03, 0.002, 0.018),
   };
   return debrisGeo;
+}
+
+function painted(geo, hex) {
+  const c = new THREE.Color(hex);
+  const n = geo.attributes.position.count;
+  const a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return geo;
+}
+
+// Tiny polaroid faces for the traveler's debris: cream frame, a snapshot of a
+// sunset, the sea, or green hills.
+let polaroidTex = null;
+function polaroidTextures() {
+  if (polaroidTex) return polaroidTex;
+  const scenes = [['#ffb347', '#ff5e62'], ['#7fd8ff', '#1a6aa8'], ['#b8e986', '#2e7d32']];
+  polaroidTex = scenes.map(([top, bottom]) => {
+    const t = new THREE.CanvasTexture(canvas(96, 116, (g, w, h) => {
+      g.fillStyle = '#f4ecd8';
+      g.fillRect(0, 0, w, h);
+      const pad = 8;
+      const ph = w - pad * 2;
+      const grad = g.createLinearGradient(0, pad, 0, pad + ph);
+      grad.addColorStop(0, top);
+      grad.addColorStop(1, bottom);
+      g.fillStyle = grad;
+      g.fillRect(pad, pad, ph, ph);
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.beginPath();
+      g.arc(pad + ph * 0.7, pad + ph * 0.3, 9, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#2b1a08';
+      g.beginPath();
+      g.moveTo(pad, pad + ph);
+      g.lineTo(pad + ph * 0.3, pad + ph * 0.6);
+      g.lineTo(pad + ph * 0.55, pad + ph * 0.8);
+      g.lineTo(pad + ph * 0.8, pad + ph * 0.55);
+      g.lineTo(pad + ph, pad + ph * 0.75);
+      g.lineTo(pad + ph, pad + ph);
+      g.fill();
+    }));
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  });
+  return polaroidTex;
 }
