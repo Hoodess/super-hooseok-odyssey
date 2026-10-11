@@ -35,7 +35,7 @@ Enjoy! Because we are all superstars.
 
 In *Super Mario Odyssey*, Mario throws his cap to "capture" and become something else. Here the cap is a pair of gloves: every spin of the roulette puts a new pair on your hands, and with it a new version of you.
 
-1. **Title** — poke **GAME START** with a fingertip. The first roulette spins by itself and the music kicks in.
+1. **Title** — poke **GAME START** with a fingertip. The first roulette spins by itself.
 2. **Roulette** — the wheel lands on a role and the gloves transform.
 3. **Play** — targets fly at you; hit six of them with your hands.
 4. **Power Moon** — the stage is cleared and a moon joins the row at the top.
@@ -87,8 +87,6 @@ adb reverse tcp:5173 tcp:5173
 
 Every push to `main` is built and deployed to GitHub Pages by GitHub Actions.
 
-The soundtrack is not part of this repository for copyright reasons, so the online version plays without music. To hear it locally, put your own copy of "Jump Up, Super Star!" at `assets/bgm/jump_up_super_star.mp3`.
-
 ## Built With
 
 - [three.js](https://threejs.org/) and WebXR hand tracking, bundled with [Vite](https://vitejs.dev/)
@@ -106,7 +104,7 @@ src/
   title.js      title screen
   ending.js     ending credits
   fx.js         flashes, halftone wipe, whiteout, particles
-  audio.js      sound effects and music
+  audio.js      sound effects
 assets/         backgrounds, glove textures, tarot cards, photos, sounds
 ```
 
@@ -119,8 +117,7 @@ assets/         backgrounds, glove textures, tarot cards, photos, sounds
 | Images | ChatGPT Images |
 | Sound effects | Gemini Lyria 3 |
 | Motif | *Super Mario Odyssey* (2017, Nintendo) |
-| Music | "Jump Up, Super Star!" from the *Super Mario Odyssey* soundtrack |
 
 Open-source assets and their licenses are listed in [CREDITS.md](CREDITS.md).
 
-*Super Mario Odyssey* and "Jump Up, Super Star!" belong to Nintendo. This is a non-commercial student project made as an homage, and it is not affiliated with or endorsed by Nintendo.
+*Super Mario Odyssey* belongs to Nintendo. This is a non-commercial student project made as an homage, and it is not affiliated with or endorsed by Nintendo.
