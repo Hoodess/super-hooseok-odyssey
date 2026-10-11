@@ -1,74 +1,126 @@
-# Super Hooseok Odyssey
+<p align="center">
+  <img src="assets/images/logo_alpha.png" alt="Super Hooseok Odyssey" width="420" />
+</p>
 
-> 손끝마다 다른 나
+<p align="center">
+  <b>A hand-tracking WebXR game about the many lives one person tries on.</b><br />
+  Hooseok Lee · Introduction to Culture Technology (2026)
+</p>
 
-장갑을 바꿔 끼면 또 다른 내가 된다. 슈퍼마리오 오디세이의 '캡처'를 장갑으로 옮겨, 핸드트래킹 XR 안에서 다섯 가지 '나'를 차례로 입어보는 1분 30초 영상 작품.
+<p align="center">
+  <a href="https://hoodess.github.io/super-hooseok-odyssey/"><b>▶ Play in your browser</b></a>
+</p>
 
-- 기획서: https://claude.ai/artifact/CFybV1MCYbB2EjH6h2JSX7
-- 마감: 2026-10-12 23:59
+<p align="center">
+  <img src="docs/screens/01_title.jpg" width="32%" alt="Title screen" />
+  <img src="docs/screens/02_roulette.jpg" width="32%" alt="Roulette" />
+  <img src="docs/screens/03_traveler.jpg" width="32%" alt="Traveler" />
+  <img src="docs/screens/04_architect.jpg" width="32%" alt="Architect" />
+  <img src="docs/screens/05_fortune.jpg" width="32%" alt="Fortune Teller" />
+  <img src="docs/screens/06_ta.jpg" width="32%" alt="Technical Artist" />
+  <img src="docs/screens/07_grad.jpg" width="32%" alt="Grad Student" />
+  <img src="docs/screens/08_finale.jpg" width="32%" alt="Finale" />
+  <img src="docs/screens/09_credits.jpg" width="32%" alt="Ending credits" />
+</p>
 
-## 기술 스택
+## About the Project
 
-- WebXR + three.js (Quest 3 브라우저, 핸드트래킹)
-- 배포: HTTPS 필요 (GitHub Pages 또는 Netlify)
-- 두 모드: **XR 모드**(헤드셋 1인칭 플레이·녹화) / **감독 모드**(PC 키보드, 트레일러 샷)
+I wanted to tell the story of the careers I have had, or once hoped to have, as my own life journey — my odyssey. I turned it into a simple VR game and planned it with Nintendo's well-known title *Super Mario Odyssey* as its motif. I made five roles — travel writer, architect, tarot reader, technical artist, and graduate student — into their own stages, and designed the art and staging to fit the character of each role.
 
-## 실행
+As shown in the ending credits, all development was done in Claude Code, while the images were generated with ChatGPT and the sound effects with Gemini, using each one's models.
+
+Enjoy! Because we are all superstars.
+
+## How It Plays
+
+In *Super Mario Odyssey*, Mario throws his cap to "capture" and become something else. Here the cap is a pair of gloves: every spin of the roulette puts a new pair on your hands, and with it a new version of you.
+
+1. **Title** — poke **GAME START** with a fingertip. The first roulette spins by itself and the music kicks in.
+2. **Roulette** — the wheel lands on a role and the gloves transform.
+3. **Play** — targets fly at you; hit six of them with your hands.
+4. **Power Moon** — the stage is cleared and a moon joins the row at the top.
+5. Press the **button on the back of your left hand** with your right index finger to spin again.
+6. After all five roles the wheel never stops: the worlds flash by, everything whites out, and the logo and credits close the journey.
+
+| # | Role | Color | Targets | On a hit |
+|---|---|---|---|---|
+| 1 | Traveler | Yellow | Blank polaroids | Shutter flash, a real travel photo develops and joins a 3 × 2 gallery |
+| 2 | Architect | Blue | Glowing wireframe blocks | The block fills in, flies off, and a building rises in the city |
+| 3 | Fortune Teller | Purple | Tarot card backs | The card flips to a real tarot card and joins a row of six |
+| 4 | Technical Artist | Green | Gray spheres and tori | Each takes a new material in turn: polished bronze, a glowing orb, a wireframe |
+| 5 | Grad Student | Red | Stacks of papers | An ACCEPTED stamp and a burst of paper |
+
+## Requirements
+
+- **Meta Quest 3** (or another WebXR headset with hand tracking) using the built-in browser.
+- Enter VR with the **ENTER VR** button on the page. Entering through the page is what lets the browser play sound from the first run.
+- On a desktop browser the game runs in **director mode** (no headset): targets are hit automatically and the keyboard drives the show.
+
+### Director mode keys
+
+| Key | Action |
+|---|---|
+| Space / Enter | Start · spin the roulette |
+| 1 – 5 | Jump to a role |
+| M | Power Moon |
+| F | Finale |
+| 0 | Back to the title |
+| A | Auto-hit on / off |
+| C | Cinematic camera |
+| G | Show / hide the gloves |
+| H | Hide the help and HUD |
+
+## Run It Locally
 
 ```bash
 npm install
-npm run dev      # https://<PC IP>:5173 — 같은 Wi-Fi의 Quest 3 브라우저로 접속 (인증서 경고는 '계속')
-npm run build    # dist/ 생성
+npm run dev      # https://<your LAN IP>:5173, open it on a Quest on the same Wi-Fi (accept the certificate warning)
+npm run build    # production build into dist/
 ```
 
-`main`에 푸시하면 GitHub Actions가 GitHub Pages로 배포한다.
+WebXR needs a secure context. Without Wi-Fi, connect the Quest over USB instead and open `http://localhost:5173` in its browser:
 
-### 감독 모드 키 (PC)
+```bash
+npm run dev:usb
+adb reverse tcp:5173 tcp:5173
+```
 
-| 키 | 동작 |
+Every push to `main` is built and deployed to GitHub Pages by GitHub Actions.
+
+The soundtrack is not part of this repository for copyright reasons, so the online version plays without music. To hear it locally, put your own copy of "Jump Up, Super Star!" at `assets/bgm/jump_up_super_star.mp3`.
+
+## Built With
+
+- [three.js](https://threejs.org/) and WebXR hand tracking, bundled with [Vite](https://vitejs.dev/)
+- Toon shading, outlines, halftone transitions and particle effects written for this project
+
+```
+src/
+  main.js       state machine, input, XR session and render loop
+  roles.js      the five roles: colors, backgrounds and targets
+  texts.js      every on-screen string (hit texts, credits)
+  roulette.js   the toy roulette wheel
+  targets.js    flying targets, hits and the per-role galleries
+  glove.js      the capture gloves on the tracked hands
+  world.js      sky, panorama, island, fog and lighting
+  title.js      title screen
+  ending.js     ending credits
+  fx.js         flashes, halftone wipe, whiteout, particles
+  audio.js      sound effects and music
+assets/         backgrounds, glove textures, tarot cards, photos, sounds
+```
+
+## Credits
+
+| | |
 |---|---|
-| Space | 룰렛 / 다음 단계 |
-| 1 ~ 5 | 롤 바로가기 |
-| F | 피날레 |
-| 0 | 처음으로 |
-| A | 자동 타격 켜기/끄기 |
-| C | 시네마틱 카메라 |
-| G | 장갑 표시 |
-| H | 안내·HUD 숨기기 |
+| Concept · Direction · Cast | Hooseok Lee |
+| Code | Claude (Anthropic), via Claude Code |
+| Images | ChatGPT Images |
+| Sound effects | Gemini Lyria 3 |
+| Motif | *Super Mario Odyssey* (2017, Nintendo) |
+| Music | "Jump Up, Super Star!" from the *Super Mario Odyssey* soundtrack |
 
-## 다섯 개의 롤
+Open-source assets and their licenses are listed in [CREDITS.md](CREDITS.md).
 
-| # | 롤 | 컬러 | 대상 | 맞혔을 때 |
-|---|---|---|---|---|
-| 1 | 대학원생 | 빨강 | 논문 더미 | ACCEPTED 도장 + 종이 폭발 |
-| 2 | 건축가 | 파랑 | 와이어프레임 블록 | 블록이 채워지고 건물이 솟음 |
-| 3 | 테크니컬 아티스트 | 초록 | 회색 구체·토러스 | 툰/크롬/홀로그램 셰이더로 변함 |
-| 4 | 포춘텔러 | 보라 | 타로 뒷면 | 카드가 뒤집히며 삶의 장면 공개 |
-| 5 | 여행(사진)가 | 노랑 | 빈 폴라로이드 | 셔터 플래시 + 여행 사진, 배경 전환 |
-
-한 롤 사이클(~11초): 룰렛(2s) → 변신(1.5s) → 플레이(6s) → 파워문(1.5s)
-
-## 조작
-
-| 인터랙션 | 핸드트래킹 | 키보드 |
-|---|---|---|
-| 손등 버튼 (룰렛 시작) | 오른손 검지 끝이 왼손 손등 중심 2.5cm 이내 | Space |
-| 치기 | 손 콜라이더(구, r=8cm)와 대상 충돌 | 클릭 / 자동 히트 |
-| 롤 점프 (감독 모드) | – | 1 ~ 5 |
-
-## 에셋 폴더
-
-생성물은 기획서의 파일명을 그대로 지켜 넣는다. `assets/`는 사이트 루트로 서빙되고, 파일이 없으면 코드 안의 임시 그림·합성음이 대신 나온다.
-
-```
-assets/
-  bg/      bg_hub, bg_grad, bg_arch, bg_ta, bg_fortune, bg_travel1~3 (.png, 1536×1024)
-  glove/   glove_grad, glove_arch, glove_ta, glove_fortune, glove_travel (.png, 1024²)
-  tarot/   tarot_back, tarot_1~6 (.png, 1024×1536)
-  images/  paper_cover, stamp_accepted, still_open, still_five (.png)
-  sfx/     sfx_roulette, sfx_transform, sfx_moon (.mp3) + CC0 효과음
-  photos/  실제 여행 사진 5장 (photo_1.jpg ~ photo_5.jpg)
-  models/  WebXR 기본 손 모델 (장갑 메시)
-```
-
-오픈소스 에셋의 라이선스와 출처는 `CREDITS.md`에 기록한다.
+*Super Mario Odyssey* and "Jump Up, Super Star!" belong to Nintendo. This is a non-commercial student project made as an homage, and it is not affiliated with or endorsed by Nintendo.

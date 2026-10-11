@@ -1,19 +1,25 @@
 # Credits
 
-## AI 생성
-| 에셋 | 도구 |
+## AI-generated
+
+| Asset | Tool |
 |---|---|
-| 로고 | 이미지 생성 |
-| 배경, 장갑 텍스처, 타로, 스틸 | GPT 이미지 |
-| sfx_roulette / sfx_transform / sfx_moon | Gemini 오디오 생성 |
-| 코드 | Claude |
+| Logo | AI image generation |
+| Backgrounds, glove textures, tarot cards, stills | ChatGPT Images |
+| sfx_roulette / sfx_transform / sfx_moon | Gemini Lyria 3 |
+| Code | Claude (Anthropic), via Claude Code |
 
-## 오픈소스 (CC0 등)
-| 에셋 | 출처 | 라이선스 |
+## Open source
+
+| Asset | Source | License |
 |---|---|---|
-| 손 모델 (assets/models/hands) | [@webxr-input-profiles/assets](https://github.com/immersive-web/webxr-input-profiles) generic-hand | MIT |
+| Hand models (assets/models/hands) | [@webxr-input-profiles/assets](https://github.com/immersive-web/webxr-input-profiles) generic-hand | MIT |
 | three.js | [three.js](https://github.com/mrdoob/three.js) | MIT |
-| Jua 폰트 (게임 내 글씨) | [Jua](https://fonts.google.com/specimen/Jua), [@fontsource/jua](https://fontsource.org/fonts/jua) | OFL-1.1 |
+| Jua font (in-game text) | [Jua](https://fonts.google.com/specimen/Jua), [@fontsource/jua](https://fontsource.org/fonts/jua) | OFL-1.1 |
 
-## 음악
-- Jump Up, Super Star! (Super Mario Odyssey OST) — 원작 OST, AI 생성물 아님
+## Music and motif
+
+- "Jump Up, Super Star!" from the *Super Mario Odyssey* original soundtrack. Not AI-generated.
+- Motif: *Super Mario Odyssey* (2017, Nintendo).
+
+Both belong to Nintendo. This is a non-commercial student project made as an homage, and it is not affiliated with or endorsed by Nintendo.

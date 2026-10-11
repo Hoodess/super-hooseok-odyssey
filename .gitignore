@@ -7,3 +7,6 @@ dist/
 .vite/
 download/
 recordings/
+
+# copyrighted soundtrack: kept local only, never committed
+assets/bgm/
